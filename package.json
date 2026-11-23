@@ -5,6 +5,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/kemuriXD/ImgurPass#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kemuriXD/ImgurPass.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kemuriXD/ImgurPass/issues"
+  },
   "scripts": {
     "dev": "wxt",
     "dev:firefox": "wxt -b firefox --mv3",
