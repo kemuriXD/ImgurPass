@@ -11,6 +11,8 @@ export default defineConfig({
       'storage',
       'alarms',
       'scripting',
+      // Lets the popup see which site the current tab is on.
+      'activeTab',
       ...(browser === 'firefox' ? [] : ['offscreen']),
     ],
     host_permissions: [
@@ -20,6 +22,7 @@ export default defineConfig({
       'https://rimgo.codeberg.page/*',
     ],
     optional_host_permissions: ['*://*/*'],
+    action: { default_icon: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png' } },
     // Album, post and video links are redirected to the viewer, and Imgur's
     // album embeds load it in an iframe, so any page may open it.
     web_accessible_resources: [{ resources: ['viewer.html'], matches: ['*://*/*'] }],

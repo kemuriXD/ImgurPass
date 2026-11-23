@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ImgurPass</title>
+  </head>
+  <body>
+    <header class="top">
+      <img class="logo" src="/logo.svg" width="28" height="28" alt="" />
+      <div class="name">ImgurPass</div>
+      <input id="enabled" class="switch" type="checkbox" aria-label="ImgurPass on" />
+    </header>
+
+    <main class="body">
+      <div id="callout" class="callout" role="status"></div>
+
+      <button id="allow-required" class="btn btn-danger" type="button" hidden>Allow these sites</button>
+
+      <div id="stats" class="stats" hidden></div>
+      <p id="reload-note" class="note" hidden>
+        This page was open before ImgurPass could act on it.
+        <button id="reload" class="link-btn" type="button">Reload it</button>
+      </p>
+
+      <p id="idle-note" class="note" hidden>
+        It checks again every few hours and when your browser starts. If Imgur gets blocked, unblocking turns on by
+        itself.
+      </p>
+
+      <div id="limited" class="stack" hidden>
+        <button id="grant-all" class="btn btn-primary" type="button">Fix embeds everywhere</button>
+        <button id="grant-site" class="btn" type="button"></button>
+        <p class="note small">
+          Your browser will ask first. ImgurPass only looks for Imgur images on the pages you visit and never reads
+          anything else.
+        </p>
+      </div>
+    </main>
+
+    <section id="site-row" class="setting section" hidden>
+      <label class="setting-text" for="site">
+        <span class="setting-title">Unblock on this site</span>
+        <span id="site-host" class="setting-desc"></span>
+      </label>
+      <input id="site" class="switch" type="checkbox" />
+    </section>
+
+    <section id="proxy-row" class="setting section" hidden>
+      <label class="setting-text" for="always">
+        <span class="setting-title">Proxy anyway</span>
+        <span class="setting-desc">Load Imgur through the proxy even when it isn't blocked</span>
+      </label>
+      <input id="always" class="switch" type="checkbox" />
+    </section>
+
+    <footer class="foot">
+      <span id="checked" class="foot-text"></span>
+      <button id="recheck" class="btn btn-sm" type="button">Check now</button>
+      <button id="settings" class="link-btn" type="button">Settings</button>
+    </footer>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
