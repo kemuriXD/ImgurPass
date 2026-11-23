@@ -116,6 +116,9 @@ a { color: var(--accent-ink); }
   color: #f5f5f2;
 }
 .lightbox[open] { display: flex; flex-direction: column; }
+/* Fast clicks on the arrows count as a double-click, which would select the image. */
+.lb-top, .lb-stage { user-select: none; -webkit-user-select: none; }
+.lb-media img { -webkit-user-drag: none; }
 .lightbox::backdrop { background: rgba(0, 0, 0, 0.85); }
 .lb-top { display: flex; align-items: center; gap: 12px; padding: 14px 20px; flex-wrap: wrap; }
 .lb-count { flex-grow: 1; font-size: 14px; color: #c9ccd6; }
