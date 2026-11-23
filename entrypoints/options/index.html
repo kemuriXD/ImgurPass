@@ -5,44 +5,126 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="manifest.open_in_tab" content="true" />
     <title>ImgurPass settings</title>
-    <style>
-      body { font: 14px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
-      dt { font-weight: 600; }
-      dd { margin: 0 0 0.5rem; }
-      label { display: block; margin: 0.4rem 0; }
-      button { margin: 0.25rem 0.5rem 0.25rem 0; }
-      .warning { border: 2px solid #cf222e; border-radius: 6px; padding: 0.5rem 1rem; margin: 1rem 0; }
-      .warning ul { margin: 0.25rem 0; }
-    </style>
   </head>
   <body>
-    <h1>ImgurPass</h1>
-    <p>Unofficial, not affiliated with Imgur.</p>
-    <div id="access-warning" class="warning" role="alert" hidden>
-      <strong>ImgurPass can't reach some sites it needs.</strong>
-      <p>
-        Site access has been switched off for the sites below, so block detection and image
-        unblocking won't work.
-      </p>
-      <ul id="missing-hosts"></ul>
-      <button id="grant-required">Grant access</button>
-    </div>
-    <dl>
-      <dt>Block status</dt>
-      <dd id="status">…</dd>
-      <dt>Unblocking</dt>
-      <dd id="active">…</dd>
-      <dt>Embeds on all sites</dt>
-      <dd id="all-sites">…</dd>
-      <dt>rimgo instances</dt>
-      <dd id="instances">…</dd>
-    </dl>
-    <button id="recheck">Check now</button>
-    <button id="grant">Fix embeds everywhere</button>
-    <label><input type="checkbox" id="enabled" /> Enabled</label>
-    <label><input type="checkbox" id="always-proxy" /> Always proxy, even when Imgur isn't blocked</label>
-    <label><input type="checkbox" id="only-no-data" /> Only use rimgo instances that don't collect data</label>
-    <label>Custom rimgo instance <input type="url" id="custom" placeholder="https://rimgo.example.org" /></label>
+    <main class="page">
+      <header class="page-head">
+        <img class="logo" src="/logo.svg" width="44" height="44" alt="" />
+        <div class="page-title">
+          <h1>ImgurPass settings</h1>
+          <div class="small muted">Unofficial. Not affiliated with Imgur.</div>
+        </div>
+      </header>
+
+      <section class="card status-card" aria-labelledby="status-h">
+        <div class="status-text">
+          <h2 id="status-h" class="status-title"></h2>
+          <p id="status-body" class="muted"></p>
+        </div>
+        <button id="recheck" class="btn" type="button">Check again</button>
+      </section>
+
+      <section class="card" aria-labelledby="access-h">
+        <h2 id="access-h" class="card-title">Site access</h2>
+        <div id="access-warning" class="callout alert" data-tone="error" role="alert" hidden>
+          <div class="callout-text">
+            <div class="callout-title">ImgurPass can't reach Imgur or the proxies</div>
+            <div id="access-body" class="callout-body"></div>
+          </div>
+          <button id="allow-required" class="btn btn-danger" type="button">Allow these sites</button>
+        </div>
+        <div class="setting">
+          <label class="setting-text" for="everywhere">
+            <span class="setting-title">Fix embeds everywhere</span>
+            <span class="setting-desc">
+              Unblock Imgur images on every site, like forums and blogs. Your browser warns that this reads data on all
+              sites; ImgurPass only looks for Imgur images. Off means only direct i.imgur.com links are fixed, plus any
+              sites you allow below.
+            </span>
+          </label>
+          <input id="everywhere" class="switch" type="checkbox" />
+        </div>
+        <div id="single-sites" class="group" hidden>
+          <div class="setting-title">Allowed one at a time</div>
+          <ul id="single-list" class="row-list"></ul>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="unblock-h">
+        <h2 id="unblock-h" class="card-title">Unblocking</h2>
+        <div class="setting">
+          <label class="setting-text" for="enabled">
+            <span class="setting-title">ImgurPass on</span>
+            <span class="setting-desc">Turn off to stop everything without uninstalling.</span>
+          </label>
+          <input id="enabled" class="switch" type="checkbox" />
+        </div>
+        <div class="setting">
+          <label class="setting-text" for="always">
+            <span class="setting-title">Always proxy</span>
+            <span class="setting-desc">
+              Load Imgur through the proxy even when no block is detected. Useful if a network blocks Imgur in a way
+              the check misses.
+            </span>
+          </label>
+          <input id="always" class="switch" type="checkbox" />
+        </div>
+        <div class="group">
+          <div class="setting-title">Paused on these sites</div>
+          <ul id="paused-list" class="row-list"></ul>
+          <p id="paused-empty" class="small muted">None. Pause a site from the toolbar button.</p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="mirrors-h">
+        <div class="card-head">
+          <h2 id="mirrors-h" class="card-title">Where images come from</h2>
+          <span id="mirror-count" class="small muted"></span>
+        </div>
+        <ol id="sources" class="row-list"></ol>
+        <div class="setting">
+          <label class="setting-text" for="nodata">
+            <span class="setting-title">Only mirrors that don't collect data</span>
+            <span class="setting-desc">
+              Skip mirrors whose operators say they keep logs. Fewer mirrors, so more images may fail.
+            </span>
+          </label>
+          <input id="nodata" class="switch" type="checkbox" />
+        </div>
+        <div class="group">
+          <label for="custom" class="setting-title">Your own rimgo mirror</label>
+          <div class="field-row">
+            <input
+              id="custom"
+              class="field"
+              type="url"
+              placeholder="https://rimgo.example.org"
+              aria-describedby="custom-help"
+              spellcheck="false"
+            />
+            <button id="test" class="btn" type="button">Test</button>
+          </div>
+          <div id="custom-help" class="small muted" aria-live="polite">
+            Used after the public mirrors. Run your own, or use one you trust.
+          </div>
+        </div>
+      </section>
+
+      <section class="card privacy" aria-labelledby="privacy-h">
+        <h2 id="privacy-h" class="card-title">Privacy</h2>
+        <p class="muted">
+          No analytics and no accounts. While unblocking is on, the address of each Imgur image you view goes to
+          DuckDuckGo or a rimgo mirror, which fetches it for you. Nothing else leaves your browser. Once a day ImgurPass
+          downloads the public mirror list from rimgo.codeberg.page.
+        </p>
+      </section>
+
+      <footer class="page-foot small muted">
+        <span id="version"></span>
+        <a href="https://github.com/kemuriXD/ImgurPass">Source code</a>
+        <a href="https://github.com/kemuriXD/ImgurPass/issues">Report a problem</a>
+      </footer>
+    </main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
