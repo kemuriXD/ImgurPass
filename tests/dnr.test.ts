@@ -104,3 +104,18 @@ describe('buildRules', () => {
     expect(apply('https://i.imgur.com/abcde12.mp4', 'image')).toBeNull();
   });
 });
+
+describe('buildRules options', () => {
+  it('sends images to a rimgo mirror when asked, leaving pages to the viewer', () => {
+    const options = { ...OPTIONS, imageInstance: 'https://rimgo.example' };
+    expect(apply('https://i.imgur.com/OB0y6MR.png', 'image', options)).toBe('https://rimgo.example/OB0y6MR.png');
+    expect(apply('https://i.imgur.com/OB0y6MR', 'image', options)).toBe('https://rimgo.example/OB0y6MR.jpg');
+    expect(apply('https://imgur.com/a/AbCd123', 'main_frame', options)).toBe(`${VIEWER}#a/AbCd123`);
+  });
+
+  it('excludes paused sites from every rule', () => {
+    const rules = buildRules({ ...OPTIONS, pausedSites: ['forum.example'] });
+    for (const rule of rules) expect(rule.condition.excludedInitiatorDomains).toEqual(['forum.example']);
+    for (const rule of buildRules(OPTIONS)) expect(rule.condition.excludedInitiatorDomains).toBeUndefined();
+  });
+});

@@ -1,3 +1,4 @@
+import { storage } from '#imports';
 import { browser, type Browser } from 'wxt/browser';
 import { API_PROBE_URL, detect, isRegionError, PROBE_ID, PROBE_SIZE, PROBE_URL, type Size } from '@/lib/detect';
 import { setRules } from '@/lib/dnr';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/instance-manager';
 import {
   ALL_SITES,
+  DDG_SOURCE,
   type BackgroundMessage,
   type FallbacksReply,
   type OffscreenProbeMessage,
@@ -22,7 +24,8 @@ import {
 } from '@/lib/messages';
 import { missingRequiredHosts } from '@/lib/permissions';
 import { fetchImageSize, loadImageSize } from '@/lib/probe';
-import { detectionItem, getSettings, isActive, settingsItem } from '@/lib/state';
+import { grantedSites, isPaused, siteHost, sitePattern } from '@/lib/sites';
+import { detectionItem, getSettings, isActive, settingsItem, type Settings } from '@/lib/state';
 
 const HOUR = 60 * 60 * 1000;
 const DETECT_EVERY_MIN = 4 * 60;
@@ -32,6 +35,9 @@ const HEALTH_MAX_AGE = 6 * HOUR;
 const HEALTH_RETRY_WHEN_FEW = HOUR / 2;
 const HEALTH_TIMEOUT_MS = 8_000;
 const FALLBACK_SCRIPT_ID = 'imgurpass-fallback';
+
+/** The rimgo mirror the image rules point at right now, if any. */
+const imageRuleInstance = storage.defineItem<string | null>('session:imageRuleInstance', { fallback: null });
 
 const isRealSize = (s: Size | null) => s?.width === PROBE_SIZE.width && s.height === PROBE_SIZE.height;
 
@@ -60,23 +66,30 @@ async function runDetection() {
 }
 
 const hasAllSites = () => browser.permissions.contains(ALL_SITES);
+const requiredHosts = (): string[] => browser.runtime.getManifest().host_permissions ?? [];
 
+async function singleSites(): Promise<string[]> {
+  return grantedSites((await browser.permissions.getAll()).origins ?? [], requiredHosts());
+}
+
+/** Run the fallback script on every site, or only on the sites the user allowed one by one. */
 async function syncFallbackScript(active: boolean) {
-  const want = active && (await hasAllSites());
-  const existing = await browser.scripting.getRegisteredContentScripts({ ids: [FALLBACK_SCRIPT_ID] });
-  if (want && existing.length === 0) {
-    await browser.scripting.registerContentScripts([
-      {
-        id: FALLBACK_SCRIPT_ID,
-        js: ['fallback.js'],
-        matches: ['*://*/*'],
-        allFrames: true,
-        runAt: 'document_start',
-      },
-    ]);
-  } else if (!want && existing.length > 0) {
-    await browser.scripting.unregisterContentScripts({ ids: [FALLBACK_SCRIPT_ID] });
-  }
+  const matches = !active ? [] : (await hasAllSites()) ? ALL_SITES.origins : (await singleSites()).map(sitePattern);
+  const [existing] = await browser.scripting.getRegisteredContentScripts({ ids: [FALLBACK_SCRIPT_ID] });
+  if (existing && existing.matches?.join() === matches.join()) return;
+  if (existing) await browser.scripting.unregisterContentScripts({ ids: [FALLBACK_SCRIPT_ID] });
+  if (matches.length === 0) return;
+  await browser.scripting.registerContentScripts([
+    { id: FALLBACK_SCRIPT_ID, js: ['fallback.js'], matches, allFrames: true, runAt: 'document_start' },
+  ]);
+}
+
+/** A known-good rimgo mirror for images, when the user puts rimgo first. */
+async function pickImageInstance(settings: Settings): Promise<string | null> {
+  if (settings.imageSource !== 'rimgo') return null;
+  const health = await healthItem.getValue();
+  const ordered = await getOrderedInstances(settings, 'image');
+  return ordered.find((url) => health[url]?.ok && health[url].checkedAt > 0) ?? null;
 }
 
 async function currentlyActive() {
@@ -91,9 +104,18 @@ function applyState(): Promise<void> {
       const settings = await getSettings();
       const active = isActive(settings, await detectionItem.getValue());
       const [videoInstance] = await getOrderedInstances(settings, 'video');
+      const imageInstance = active ? await pickImageInstance(settings) : null;
       await setRules(
-        active ? { viewerUrl: browser.runtime.getURL('/viewer.html'), videoInstance: videoInstance ?? null } : null,
+        active
+          ? {
+              viewerUrl: browser.runtime.getURL('/viewer.html'),
+              videoInstance: videoInstance ?? null,
+              imageInstance,
+              pausedSites: settings.pausedSites,
+            }
+          : null,
       );
+      await imageRuleInstance.setValue(imageInstance);
       await syncFallbackScript(active);
     })
     .catch((err) => console.error('ImgurPass: failed to apply state', err));
@@ -182,18 +204,30 @@ async function status(): Promise<StatusReply> {
     active: await currentlyActive(),
     allSites: await hasAllSites(),
     missingHosts: await missingRequiredHosts(),
-    healthyInstances: instances.filter((i) => health[i.url]?.ok).length,
+    healthyInstances: instances.filter((i) => health[i.url]?.ok && health[i.url]!.checkedAt > 0).length,
     knownInstances: instances.length,
+    listUpdatedAt: (await instanceListItem.getValue()).fetchedAt,
+    grantedSites: await singleSites(),
   };
 }
 
-async function handleMessage(msg: BackgroundMessage): Promise<unknown> {
+/** Mirrors (and DuckDuckGo) for a page to retry failed media through, in order. */
+async function fallbacks(capability: 'image' | 'video' | 'album', settings: Settings): Promise<string[]> {
+  const instances = await getOrderedInstances(settings, capability);
+  if (capability !== 'image' || settings.imageSource !== 'rimgo') return instances;
+  // The rules sent the image to a rimgo mirror first: DuckDuckGo is next, then the other mirrors.
+  const first = await imageRuleInstance.getValue();
+  return [DDG_SOURCE, ...instances.filter((url) => url !== first)];
+}
+
+async function handleMessage(msg: BackgroundMessage, sender: Browser.runtime.MessageSender): Promise<unknown> {
   switch (msg.type) {
     case 'get-fallbacks': {
       const settings = await getSettings();
+      const paused = isPaused(siteHost(sender.tab?.url), settings.pausedSites);
       return {
-        active: isActive(settings, await detectionItem.getValue()),
-        instances: await getOrderedInstances(settings, msg.capability ?? 'image'),
+        active: !paused && isActive(settings, await detectionItem.getValue()),
+        instances: await fallbacks(msg.capability ?? 'image', settings),
         allSites: await hasAllSites(),
       } satisfies FallbacksReply;
     }
@@ -232,7 +266,7 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
     const msg = message as BackgroundMessage & { target?: string };
     if (sender.id !== browser.runtime.id || msg?.target === 'offscreen') return;
-    handleMessage(msg).then(sendResponse, (err) => {
+    handleMessage(msg, sender).then(sendResponse, (err) => {
       console.error('ImgurPass: message failed', err);
       sendResponse(null);
     });

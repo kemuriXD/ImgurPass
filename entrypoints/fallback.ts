@@ -1,12 +1,20 @@
-// Registered at runtime on all sites once the user grants access. When an
-// Imgur image or video fails to load (images are already redirected to
-// DuckDuckGo, videos to a rimgo mirror, by the DNR rules), retry it through
-// the other healthy rimgo mirrors in turn. A video that fails everywhere gets
-// an "Open on rimgo" link.
+// Registered at runtime on the sites the user allowed. When an Imgur image or
+// video fails to load (the DNR rules already sent images to DuckDuckGo or a
+// rimgo mirror, and videos to a rimgo mirror), retry it through the other
+// sources in turn. A video that fails everywhere gets an "Open on rimgo" link.
+// The toolbar popup also asks it how many images on the page were fixed.
 import { browser } from 'wxt/browser';
-import { parseImgurUrl, rimgoMediaUrl, unwrapDuckDuckGo } from '@/lib/imgur-url';
+import { duckDuckGoUrl, parseImgurUrl, rimgoMediaUrl, unwrapDuckDuckGo } from '@/lib/imgur-url';
 import type { Capability } from '@/lib/instances';
-import type { BackgroundMessage, FallbacksReply } from '@/lib/messages';
+import {
+  DDG_SOURCE,
+  type BackgroundMessage,
+  type FallbacksReply,
+  type PageStats,
+  type PageStatsMessage,
+} from '@/lib/messages';
+
+const PLACEHOLDER = { width: 336, height: 478 };
 
 type Media = HTMLImageElement | HTMLVideoElement;
 
@@ -80,7 +88,7 @@ export default defineUnlistedScript(() => {
     const src = currentSrc(el);
     let attempt = attempts.get(el);
 
-    if (attempt?.src && attempt.src === src && attempt.instance) {
+    if (attempt?.src && attempt.src === src && attempt.instance && attempt.instance !== DDG_SOURCE) {
       void send({ type: 'instance-result', instance: attempt.instance, ok: false, capability: attempt.capability });
     } else {
       // New element (or the page changed its src): is it Imgur media?
@@ -99,8 +107,9 @@ export default defineUnlistedScript(() => {
         id: parsed.id,
         ext: capability === 'video' ? 'mp4' : parsed.ext,
         capability,
-        queue: [...reply.instances],
-        best: reply.instances[0],
+        // DuckDuckGo only proxies images.
+        queue: reply.instances.filter((s) => capability === 'image' || s !== DDG_SOURCE),
+        best: reply.instances.find((s) => s !== DDG_SOURCE),
       };
       attempts.set(el, attempt);
     }
@@ -114,7 +123,8 @@ export default defineUnlistedScript(() => {
       }
       return;
     }
-    const next = rimgoMediaUrl(instance, attempt.id, attempt.ext);
+    const next =
+      instance === DDG_SOURCE ? duckDuckGoUrl(attempt.id, attempt.ext) : rimgoMediaUrl(instance, attempt.id, attempt.ext);
     const capability = attempt.capability;
     attempt.instance = instance;
     attempt.src = next;
@@ -124,8 +134,12 @@ export default defineUnlistedScript(() => {
       () => {
         if (currentSrc(el) !== next) return;
         // A mirror that is itself blocked serves Imgur's region placeholder: try the next one.
-        if (el instanceof HTMLImageElement && el.naturalWidth === 336 && el.naturalHeight === 478) {
+        if (isPlaceholder(el)) {
           void onError(el);
+          return;
+        }
+        if (instance === DDG_SOURCE) {
+          el.dataset.imgurpass = DDG_SOURCE;
           return;
         }
         el.dataset.imgurpass = 'rimgo';
@@ -135,6 +149,41 @@ export default defineUnlistedScript(() => {
     );
     setSrc(el, next);
   }
+
+  const isPlaceholder = (el: Media) =>
+    el instanceof HTMLImageElement && el.naturalWidth === PLACEHOLDER.width && el.naturalHeight === PLACEHOLDER.height;
+
+  /** Count the Imgur media on this page by where it ended up loading from. */
+  function pageStats(imageVia: PageStatsMessage['imageVia']): PageStats {
+    const stats: PageStats = { duckduckgo: 0, rimgo: 0, failed: 0 };
+    for (const el of document.querySelectorAll<Media>('img, video')) {
+      const state = el.dataset.imgurpass;
+      if (state === 'failed') stats.failed++;
+      else if (state === 'rimgo') stats.rimgo++;
+      else if (state === DDG_SOURCE) stats.duckduckgo++;
+      else if (state === 'retrying') continue;
+      else {
+        // Untouched: loaded wherever the redirect rules sent it, if it's Imgur at all.
+        const src = currentSrc(el);
+        const parsed = parseImgurUrl(unwrapDuckDuckGo(src) ?? src);
+        if (!parsed?.id || !parsed.ext) continue;
+        if (el instanceof HTMLImageElement) {
+          if (!el.complete || el.naturalWidth === 0 || isPlaceholder(el)) continue;
+          stats[imageVia === 'rimgo' ? 'rimgo' : 'duckduckgo']++;
+        } else if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          stats.rimgo++;
+        }
+      }
+    }
+    return stats;
+  }
+
+  browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+    const msg = message as PageStatsMessage | null;
+    // The popup asks the top frame only.
+    if (msg?.type !== 'page-stats' || window !== window.top) return;
+    sendResponse(pageStats(msg.imageVia));
+  });
 
   // Load errors don't bubble, but they can be caught on the way down. A
   // <video>'s <source> children fire their own error events.

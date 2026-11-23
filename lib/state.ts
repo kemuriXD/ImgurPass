@@ -17,13 +17,21 @@ export interface Settings {
   onlyNoDataInstances: boolean;
   /** User's own rimgo instance, tried after the healthy public ones. Empty when unset. */
   customInstance: string;
+  /** Where images go first. The other is tried when that fails. */
+  imageSource: ImageSource;
+  /** Hostnames where the user paused ImgurPass. Subdomains are paused too. */
+  pausedSites: string[];
 }
+
+export type ImageSource = 'duckduckgo' | 'rimgo';
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   alwaysProxy: false,
   onlyNoDataInstances: false,
   customInstance: '',
+  imageSource: 'duckduckgo',
+  pausedSites: [],
 };
 
 export const settingsItem = storage.defineItem<Settings>('local:settings', {

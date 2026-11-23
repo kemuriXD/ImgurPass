@@ -26,6 +26,10 @@ export interface RuleOptions {
   viewerUrl: string;
   /** rimgo origin for embedded <video>s, or null to leave them alone. */
   videoInstance: string | null;
+  /** rimgo origin to send images to first, or null for DuckDuckGo. */
+  imageInstance?: string | null;
+  /** Hostnames where nothing is changed (subdomains included). */
+  pausedSites?: readonly string[];
 }
 
 function redirect(id: number, regexFilter: string, regexSubstitution: string, types: ResourceType[]): Rule {
@@ -48,13 +52,14 @@ const caseSensitive = (rule: Rule): Rule => ({ ...rule, condition: { ...rule.con
  * extensions (all [A-Za-z0-9]) and write any encoded prefix out literally.
  * Query strings are dropped; Imgur doesn't need them.
  */
-export function buildRules({ viewerUrl, videoInstance }: RuleOptions): Rule[] {
+export function buildRules({ viewerUrl, videoInstance, imageInstance, pausedSites = [] }: RuleOptions): Rule[] {
   const viewer = `${viewerUrl}#`;
+  // Images go to the DuckDuckGo proxy, or to a rimgo mirror if the user prefers.
+  const image = imageInstance ? `${imageInstance}/` : DDG;
   const rules: Rule[] = [
-    // Images go to the DuckDuckGo proxy.
-    redirect(1, `^https?://i\\.imgur\\.com/${ID}\\.${EXT}${TAIL}`, `${DDG}\\1.\\2`, IMAGE_TYPES),
-    redirect(2, `^https?://i\\.imgur\\.com/${ID}/?(?:[?#].*)?$`, `${DDG}\\1.jpg`, IMAGE_TYPES),
-    redirect(3, `${PAGE_HOST}/${ID}\\.${EXT}${TAIL}`, `${DDG}\\1.\\2`, IMAGE_TYPES),
+    redirect(1, `^https?://i\\.imgur\\.com/${ID}\\.${EXT}${TAIL}`, `${image}\\1.\\2`, IMAGE_TYPES),
+    redirect(2, `^https?://i\\.imgur\\.com/${ID}/?(?:[?#].*)?$`, `${image}\\1.jpg`, IMAGE_TYPES),
+    redirect(3, `${PAGE_HOST}/${ID}\\.${EXT}${TAIL}`, `${image}\\1.\\2`, IMAGE_TYPES),
 
     // Albums, galleries, posts and videos open in the viewer.
     redirect(10, `${PAGE_HOST}/a/${ID}(?:/embed)?/?(?:[?#].*)?$`, `${viewer}a/\\1`, PAGE_TYPES),
@@ -74,7 +79,9 @@ export function buildRules({ viewerUrl, videoInstance }: RuleOptions): Rule[] {
     // Embedded <video> elements: rimgo serves every Imgur video as mp4.
     rules.push(redirect(4, `^https?://i\\.imgur\\.com/${ID}\\.${VIDEO_EXT}${TAIL}`, `${videoInstance}/\\1.mp4`, ['media']));
   }
-  return rules;
+  if (pausedSites.length === 0) return rules;
+  // Requests made by a paused site, and links followed from it, are left alone.
+  return rules.map((rule) => ({ ...rule, condition: { ...rule.condition, excludedInitiatorDomains: [...pausedSites] } }));
 }
 
 /**
