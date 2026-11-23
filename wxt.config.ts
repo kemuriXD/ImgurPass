@@ -32,7 +32,8 @@ export default defineConfig({
             gecko: {
               id: 'imgurpass@kemurixd',
               strict_min_version: '140.0',
-              data_collection_permissions: { required: ['none'] },
+              // Imgur media addresses go to DuckDuckGo or a rimgo mirror, which fetch them.
+              data_collection_permissions: { required: ['websiteContent'] },
             },
           },
         }

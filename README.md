@@ -63,7 +63,7 @@ You can allow ImgurPass on every site ("Fix embeds everywhere"), or only on the 
 
 There are no analytics, crash reports or accounts.
 
-While Imgur is blocked (or Always proxy is on), the address of each Imgur image, video or album you open goes to DuckDuckGo or to a rimgo mirror, which fetches it for you. They also see your IP address, as with any website. Nothing about the pages you visit is sent anywhere.
+While Imgur is blocked (or Always proxy is on), the address of each Imgur image, video or album you open goes to DuckDuckGo or to a rimgo mirror, which fetches it for you. They also see your IP address, as with any website. Nothing about the pages you visit is sent anywhere. Firefox lists this as sharing "website content" when you install ImgurPass.
 
 When Imgur isn't blocked, nothing goes to the proxies. The one exception: if Imgur doesn't answer the check at all, ImgurPass loads one test image through DuckDuckGo to tell a block from an outage. While unblocking is on, it also loads a test image from each rimgo mirror every few hours to see which ones work. Once a day ImgurPass downloads the public mirror list from `rimgo.codeberg.page`.
 
