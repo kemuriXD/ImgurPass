@@ -46,7 +46,9 @@ a { color: var(--accent-ink); }
   border: 1px solid var(--control);
   background: var(--surface);
   color: var(--ink);
-  font: 500 13px/1 inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
   font-family: inherit;
   text-decoration: none;
   cursor: pointer;

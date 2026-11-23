@@ -9,8 +9,8 @@ import { ALL_SITES, type BackgroundMessage, type FallbacksReply } from '@/lib/me
 import { parseRimgoPost, type Album, type AlbumMedia } from '@/lib/rimgo-parse';
 import { imgurRouteUrl, parseViewerRoute, rimgoRouteUrl, type ViewerRoute } from '@/lib/viewer-route';
 
-const MAX_PAGE_TRIES = 5;
-const PAGE_TIMEOUT_MS = 12_000;
+const MAX_PAGE_TRIES = 4;
+const PAGE_TIMEOUT_MS = 8_000;
 const embed = window.top !== window;
 if (embed) document.body.classList.add('embed');
 
