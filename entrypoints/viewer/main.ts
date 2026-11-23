@@ -320,9 +320,9 @@ function showNotFound(route: ViewerRoute, instance: string) {
   show(h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")));
 }
 
-/** "the ImgurPass server" or "rimgo mirror <host>", for the bar above the album. */
+/** "the ImgurPass server" or "rimgo mirror <host>", for an origin or any URL on it. */
 function sourceName(instance: string): string {
-  return instance === IMGURPASS_SERVER ? 'the ImgurPass server' : `rimgo mirror ${hostOf(instance)}`;
+  return isServerUrl(instance) ? 'the ImgurPass server' : `rimgo mirror ${hostOf(instance)}`;
 }
 
 /** Mirrors whose pages the viewer may read. Without all-sites access, only the ImgurPass server's. */
