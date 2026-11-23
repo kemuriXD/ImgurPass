@@ -16,6 +16,10 @@ import {
   orderInstances,
   parseInstanceList,
   SOFT_FAILURE_LIMIT,
+  CAPABILITY_RETRY_MS,
+  withCapabilityResult,
+  withCheckResult,
+  withReportedFailure,
   type HealthMap,
   type Instance,
 } from '../lib/instances';
@@ -78,6 +82,30 @@ describe('orderInstances', () => {
     expect(
       orderInstances(list, health, { onlyNoData: true, customInstance: 'my.rimgo.example', random: noShuffle }),
     ).toEqual(['https://c.example', 'https://e.example', 'https://my.rimgo.example']);
+  });
+
+  it('orders by video or album capability, retrying old failures', () => {
+    const now = 10 * CAPABILITY_RETRY_MS;
+    const capHealth: HealthMap = {
+      'https://a.example': { ok: true, checkedAt: 1, failures: 0, video: { ok: true, at: now - 1 } },
+      'https://b.example': { ok: true, checkedAt: 1, failures: 0, video: { ok: false, at: now - 1 } },
+      'https://c.example': { ok: true, checkedAt: 1, failures: 0, video: { ok: false, at: now - CAPABILITY_RETRY_MS - 1 } },
+      'https://d.example': { ok: false, checkedAt: 1, failures: 3, video: { ok: true, at: now - 1 } },
+    };
+    expect(orderInstances(list, capHealth, { onlyNoData: false, capability: 'video', now, random: noShuffle })).toEqual([
+      'https://a.example',
+      'https://c.example',
+      'https://e.example',
+    ]);
+    // Images ignore video results.
+    expect(orderInstances(list, capHealth, { onlyNoData: false, now, random: noShuffle })).toContain('https://b.example');
+  });
+
+  it('keeps capability results when image health changes', () => {
+    let h = withCapabilityResult({}, 'https://a.example', 'album', true, 5);
+    h = withReportedFailure(h, 'https://a.example', 6);
+    h = withCheckResult(h, 'https://a.example', true, 7);
+    expect(h['https://a.example']).toEqual({ ok: true, checkedAt: 7, failures: 0, album: { ok: true, at: 5 } });
   });
 
   it('shuffles within a group to spread load', () => {
@@ -151,11 +179,11 @@ describe('instance manager', () => {
   });
 
   it('only a full check moves the last-check time', async () => {
-    await reportInstanceResult('https://ri.bcow.xyz', true, 50);
+    await reportInstanceResult('https://ri.bcow.xyz', true, 'image', 50);
     expect(await lastHealthCheckItem.getValue()).toBe(0);
     await checkHealth(async () => null, '', 99);
     expect(await lastHealthCheckItem.getValue()).toBe(99);
-    await reportInstanceResult('https://ri.bcow.xyz', true, 200);
+    await reportInstanceResult('https://ri.bcow.xyz', true, 'image', 200);
     expect((await healthItem.getValue())['https://ri.bcow.xyz']?.checkedAt).toBe(99);
   });
 

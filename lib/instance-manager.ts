@@ -9,6 +9,8 @@ import {
   withCheckResult,
   withReportedFailure,
   withReportedSuccess,
+  withCapabilityResult,
+  type Capability,
   type HealthMap,
   type Instance,
 } from './instances';
@@ -88,16 +90,23 @@ export async function checkHealth(
   return healthItem.getValue();
 }
 
-export async function getOrderedInstances(settings: Settings): Promise<string[]> {
+export async function getOrderedInstances(settings: Settings, capability: Capability = 'image'): Promise<string[]> {
   return orderInstances(await getInstances(), await healthItem.getValue(), {
     onlyNoData: settings.onlyNoDataInstances,
     customInstance: settings.customInstance,
+    capability,
   });
 }
 
-/** Called when a page loaded (or failed to load) an image from an instance. */
-export function reportInstanceResult(instance: string, ok: boolean, now = Date.now()): Promise<void> {
+/** Called when a page loaded (or failed to load) an image, video or album from an instance. */
+export function reportInstanceResult(
+  instance: string,
+  ok: boolean,
+  capability: Capability = 'image',
+  now = Date.now(),
+): Promise<void> {
   const url = normalizeInstance(instance);
   if (!url) return Promise.resolve();
+  if (capability !== 'image') return updateHealth((h) => withCapabilityResult(h, url, capability, ok, now));
   return updateHealth((h) => (ok ? withReportedSuccess(h, url, now) : withReportedFailure(h, url, now)));
 }

@@ -10,12 +10,26 @@ export interface Instance {
   country?: string;
 }
 
+/** What an instance is used for. Many mirrors serve images but not video or album pages. */
+export type Capability = 'image' | 'video' | 'album';
+
+export interface CapabilityHealth {
+  ok: boolean;
+  at: number;
+}
+
 export interface Health {
+  /** Image health. */
   ok: boolean;
   checkedAt: number;
   /** Consecutive failures reported from pages since the last success. */
   failures: number;
+  video?: CapabilityHealth;
+  album?: CapabilityHealth;
 }
+
+/** A failed video or album capability is retried after this long. */
+export const CAPABILITY_RETRY_MS = 6 * 60 * 60 * 1000;
 
 export type HealthMap = Record<string, Health>;
 
@@ -61,22 +75,38 @@ export function shuffle<T>(items: readonly T[], random: () => number = Math.rand
 export interface OrderOptions {
   onlyNoData: boolean;
   customInstance?: string;
+  /** Defaults to "image". */
+  capability?: Capability;
+  now?: number;
   random?: () => number;
 }
 
+/** 0 = known good, 1 = untested (or failed long ago), null = skip. */
+function rank(h: Health | undefined, capability: Capability, now: number): 0 | 1 | null {
+  const imageTested = !!h && (h.checkedAt > 0 || h.failures > 0);
+  if (imageTested && !h.ok) return null;
+  if (capability === 'image') return imageTested ? 0 : 1;
+  const cap = h?.[capability];
+  if (!cap) return 1;
+  if (cap.ok) return 0;
+  return now - cap.at > CAPABILITY_RETRY_MS ? 1 : null;
+}
+
 /**
- * Instances to try, best first. Healthy before untested; within each, "data
+ * Instances to try, best first. Known good before untested; within each, "data
  * not collected" first; each group shuffled to spread load. Down instances are
  * skipped. The user's custom instance always comes last.
  */
 export function orderInstances(list: readonly Instance[], health: HealthMap, opts: OrderOptions): string[] {
   const random = opts.random ?? Math.random;
+  const capability = opts.capability ?? 'image';
+  const now = opts.now ?? Date.now();
   const groups: Instance[][] = [[], [], [], []];
   for (const inst of list) {
     if (opts.onlyNoData && !inst.noData) continue;
-    const h = health[inst.url];
-    if (h && !h.ok) continue;
-    groups[(h ? 0 : 2) + (inst.noData ? 0 : 1)]!.push(inst);
+    const r = rank(health[inst.url], capability, now);
+    if (r === null) continue;
+    groups[r * 2 + (inst.noData ? 0 : 1)]!.push(inst);
   }
   const ordered = groups.flatMap((g) => shuffle(g, random).map((i) => i.url));
 
@@ -85,19 +115,33 @@ export function orderInstances(list: readonly Instance[], health: HealthMap, opt
   return ordered;
 }
 
+const base = (h: Health | undefined): Health => h ?? { ok: true, checkedAt: 0, failures: 0 };
+
 /** Result of a full health check (known probe image): authoritative. */
 export function withCheckResult(health: HealthMap, url: string, ok: boolean, now: number): HealthMap {
-  return { ...health, [url]: { ok, checkedAt: now, failures: ok ? 0 : SOFT_FAILURE_LIMIT } };
+  return { ...health, [url]: { ...base(health[url]), ok, checkedAt: now, failures: ok ? 0 : SOFT_FAILURE_LIMIT } };
 }
 
 /** An image failed to load from this instance on a page. Might just be a missing image. */
 export function withReportedFailure(health: HealthMap, url: string, now: number): HealthMap {
-  const prev = health[url];
-  const failures = (prev?.failures ?? 0) + 1;
-  return { ...health, [url]: { ok: failures < SOFT_FAILURE_LIMIT, checkedAt: prev?.checkedAt ?? now, failures } };
+  const prev = base(health[url]);
+  const failures = prev.failures + 1;
+  return { ...health, [url]: { ...prev, ok: failures < SOFT_FAILURE_LIMIT, checkedAt: prev.checkedAt || now, failures } };
 }
 
 /** An image loaded from this instance on a page. */
 export function withReportedSuccess(health: HealthMap, url: string, now: number): HealthMap {
-  return { ...health, [url]: { ok: true, checkedAt: health[url]?.checkedAt ?? now, failures: 0 } };
+  const prev = base(health[url]);
+  return { ...health, [url]: { ...prev, ok: true, checkedAt: prev.checkedAt || now, failures: 0 } };
+}
+
+/** A video or album page loaded (or didn't) from this instance. */
+export function withCapabilityResult(
+  health: HealthMap,
+  url: string,
+  capability: 'video' | 'album',
+  ok: boolean,
+  now: number,
+): HealthMap {
+  return { ...health, [url]: { ...base(health[url]), [capability]: { ok, at: now } } };
 }
