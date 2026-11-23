@@ -193,7 +193,9 @@ lightbox.addEventListener('close', () => $('lb-media').replaceChildren());
 async function fetchPage(url: string): Promise<{ status: number; text: string } | null> {
   try {
     const res = await fetch(url, {
-      credentials: 'omit',
+      // Send the mirror's own cookies: once the browser has passed a mirror's
+      // bot check, that cookie is what lets this request through too.
+      credentials: 'include',
       referrerPolicy: 'no-referrer',
       signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
     });
@@ -303,16 +305,7 @@ function showNeedsAccess(route: ViewerRoute, best: string | null) {
   );
 
   if (rimgoUrl && !embed) {
-    let left = 5;
-    const tick = () => {
-      countdown.textContent = `Opening on ${hostOf(best!)} in ${left} s.`;
-      if (left-- <= 0) {
-        clearInterval(countdownTimer);
-        if (!goToMirror(rimgoUrl)) countdown.textContent = '';
-      }
-    };
-    tick();
-    countdownTimer = setInterval(tick, 1000);
+    startCountdown(countdown, best!, rimgoUrl);
   } else if (!rimgoUrl) {
     countdown.textContent = 'No rimgo mirror is working right now. Try again later.';
   }
@@ -333,11 +326,18 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
 
   // Two mirrors agreeing on "not found" is enough; one could be misconfigured.
   let notFound = 0;
+  const attempts: { host: string; result: string }[] = [];
+  let challenged: string | undefined;
   for (const instance of albums.instances.slice(0, MAX_PAGE_TRIES)) {
     show(h('p', { class: 'muted' }, `Loading from ${hostOf(instance)}…`));
     const page = await fetchPage(rimgoRouteUrl(instance, route));
     if (gen !== generation) return;
-    if (!page || (page.status >= 400 && page.status !== 404)) {
+    const note = (result: string) => {
+      attempts.push({ host: hostOf(instance), result });
+      console.info(`ImgurPass: ${hostOf(instance)}: ${result}`);
+    };
+    if (!page) {
+      note('no answer, timed out, or not a web page');
       report(instance, false, 'album');
       continue;
     }
@@ -347,6 +347,7 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
       return renderAlbum(route, parsed.album, instance, images.instances, videos.instances);
     }
     if (page.status === 404 && !parsed.ok && parsed.reason === 'not-found') {
+      note('says the album was not found');
       report(instance, true, 'album');
       if (++notFound < 2) continue;
       setBar(route, `Checked on rimgo mirror ${hostOf(instance)}`, rimgoRouteUrl(instance, route));
@@ -354,23 +355,70 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
         h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")),
       );
     }
+    const why = parsed.ok
+      ? `HTTP ${page.status}`
+      : {
+          'rate-limited': 'rate limited by Imgur',
+          'not-found': `HTTP ${page.status}, error page`,
+          'not-rimgo': 'answered with a bot check or another page',
+          empty: 'answered with an empty album',
+        }[parsed.reason];
+    note(page.status === 200 || parsed.ok ? why : `HTTP ${page.status}, ${why}`);
+    // A bot check is a mirror that's up and that the browser can get past.
+    if (!parsed.ok && parsed.reason === 'not-rimgo' && [200, 403, 503].includes(page.status)) challenged ??= instance;
     report(instance, false, 'album');
   }
 
-  // Every mirror we could read is blocked, rate limited or behind a bot check.
-  // Opening one as a normal page lets the browser deal with those checks.
-  const rimgoUrl = best ? rimgoRouteUrl(best, route) : null;
-  const sent = !!rimgoUrl && !embed && goToMirror(rimgoUrl);
+  // Every mirror we tried is blocked, rate limited or behind a bot check.
+  // Opening one as a normal page lets the browser deal with its check; after
+  // that, its cookie lets the viewer read albums from it too.
+  const target = challenged ?? best;
+  const rimgoUrl = target ? rimgoRouteUrl(target, route) : null;
   setBar(route, 'ImgurPass', rimgoUrl);
+  const countdown = h('p', {});
+  const stay = h('button', { type: 'button', class: 'btn btn-lg' }, 'Stay here');
+  const retry = h('button', { type: 'button', class: 'btn btn-lg' }, 'Try again');
+  stay.addEventListener('click', () => {
+    clearInterval(countdownTimer);
+    countdown.textContent = '';
+    stay.remove();
+  });
+  retry.addEventListener('click', () => void start());
   show(
     h(
       'section',
       { class: 'notice' },
-      h('h2', {}, sent ? `Opening on ${hostOf(best!)}…` : rimgoUrl ? "Couldn't read this album here" : 'No mirror could load this'),
-      h('p', {}, rimgoUrl ? "The mirrors wouldn't let ImgurPass read this album. You can open it on rimgo instead." : 'No rimgo mirror is working right now. Try again later.'),
-      rimgoUrl ? h('div', { class: 'actions' }, h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, 'Open on rimgo')) : null,
+      h('h2', {}, rimgoUrl ? "Couldn't read this album here" : 'No mirror could load this'),
+      h('p', {}, rimgoUrl ? "These mirrors wouldn't let ImgurPass read the album, so it opens on rimgo instead:" : 'No rimgo mirror is working right now. Try again later.'),
+      attempts.length ? h('ul', { class: 'attempts' }, ...attempts.map((a) => h('li', {}, `${a.host}: ${a.result}`))) : null,
+      challenged
+        ? h('p', {}, `${hostOf(challenged)} asks browsers to pass a quick check first. Once you have, its albums can show here again.`)
+        : null,
+      countdown,
+      h(
+        'div',
+        { class: 'actions' },
+        rimgoUrl ? h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, 'Open on rimgo') : null,
+        rimgoUrl && !embed ? stay : null,
+        retry,
+      ),
     ),
   );
+  if (rimgoUrl && !embed) startCountdown(countdown, target!, rimgoUrl);
+}
+
+/** Count down, then forward to the mirror (unless we just did for this link). */
+function startCountdown(countdown: HTMLElement, instance: string, url: string) {
+  let left = 5;
+  const tick = () => {
+    countdown.textContent = `Opening on ${hostOf(instance)} in ${left} s.`;
+    if (left-- <= 0) {
+      clearInterval(countdownTimer);
+      if (!goToMirror(url)) countdown.textContent = '';
+    }
+  };
+  tick();
+  countdownTimer = setInterval(tick, 1000);
 }
 
 // ---------- single video ----------

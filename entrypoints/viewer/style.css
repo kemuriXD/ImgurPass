@@ -152,3 +152,4 @@ a { color: var(--accent-ink); }
 body.embed .bar { position: static; padding: 8px 12px; }
 body.embed .main { padding: 12px; gap: 12px; }
 body.embed .head h1 { font-size: 20px; }
+.attempts { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
