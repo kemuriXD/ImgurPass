@@ -106,6 +106,11 @@ function loadWithFallback(
   });
   el.addEventListener(el instanceof HTMLVideoElement ? 'loadeddata' : 'load', () => {
     const s = current();
+    // A mirror that is itself blocked serves Imgur's region placeholder.
+    if (el instanceof HTMLImageElement && el.naturalWidth === 336 && el.naturalHeight === 478) {
+      if (s?.instance) report(s.instance, false, capability);
+      return next();
+    }
     if (s?.instance && reported !== i) {
       reported = i;
       report(s.instance, true, capability);
@@ -140,6 +145,12 @@ const lightbox = $<HTMLDialogElement>('lightbox');
 let lbItems: { media: AlbumMedia; el: HTMLImageElement | HTMLVideoElement }[] = [];
 let lbIndex = 0;
 
+const isFailed = (i: number) => !lbItems[i]?.el.isConnected;
+function step(from: number, dir: 1 | -1): number | null {
+  for (let i = from + dir; i >= 0 && i < lbItems.length; i += dir) if (!isFailed(i)) return i;
+  return null;
+}
+
 function showLightbox(index: number) {
   lbIndex = index;
   const item = lbItems[index];
@@ -158,17 +169,22 @@ function showLightbox(index: number) {
     }),
   );
   $('lb-caption').textContent = [item.media.title, item.media.description].filter(Boolean).join('\n');
-  $<HTMLButtonElement>('lb-prev').disabled = index === 0;
-  $<HTMLButtonElement>('lb-next').disabled = index === lbItems.length - 1;
+  $<HTMLButtonElement>('lb-prev').disabled = step(index, -1) === null;
+  $<HTMLButtonElement>('lb-next').disabled = step(index, 1) === null;
   if (!lightbox.open) lightbox.showModal();
 }
 
+function go(dir: 1 | -1) {
+  const i = step(lbIndex, dir);
+  if (i !== null) showLightbox(i);
+}
+
 $('lb-close').addEventListener('click', () => lightbox.close());
-$('lb-prev').addEventListener('click', () => showLightbox(lbIndex - 1));
-$('lb-next').addEventListener('click', () => showLightbox(lbIndex + 1));
+$('lb-prev').addEventListener('click', () => go(-1));
+$('lb-next').addEventListener('click', () => go(1));
 lightbox.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowLeft' && lbIndex > 0) showLightbox(lbIndex - 1);
-  if (e.key === 'ArrowRight' && lbIndex < lbItems.length - 1) showLightbox(lbIndex + 1);
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
 });
 lightbox.addEventListener('close', () => $('lb-media').replaceChildren());
 
@@ -248,9 +264,25 @@ function renderAlbum(route: ViewerRoute, album: Album, instance: string, images:
   );
 }
 
-function goToMirror(url: string) {
-  if (embed) window.open(url, '_blank', 'noreferrer');
-  else location.replace(url);
+/** Bumped on every start(); stale async work checks it and stops. */
+let generation = 0;
+let countdownTimer: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * Navigate this tab to a mirror, unless we just did that for the same link
+ * (a mirror redirecting back to imgur.com would otherwise loop forever).
+ */
+function goToMirror(url: string): boolean {
+  const key = `imgurpass:sent:${location.hash}`;
+  try {
+    const last = Number(sessionStorage.getItem(key) ?? 0);
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // Storage blocked: navigate anyway.
+  }
+  location.replace(url);
+  return true;
 }
 
 function showNeedsAccess(route: ViewerRoute, best: string | null) {
@@ -270,49 +302,53 @@ function showNeedsAccess(route: ViewerRoute, best: string | null) {
     ),
   );
 
-  let timer: ReturnType<typeof setInterval> | undefined;
   if (rimgoUrl && !embed) {
     let left = 5;
     const tick = () => {
       countdown.textContent = `Opening on ${hostOf(best!)} in ${left} s.`;
       if (left-- <= 0) {
-        clearInterval(timer);
-        goToMirror(rimgoUrl);
+        clearInterval(countdownTimer);
+        if (!goToMirror(rimgoUrl)) countdown.textContent = '';
       }
     };
     tick();
-    timer = setInterval(tick, 1000);
+    countdownTimer = setInterval(tick, 1000);
   } else if (!rimgoUrl) {
     countdown.textContent = 'No rimgo mirror is working right now. Try again later.';
   }
 
   grant.addEventListener('click', async () => {
-    clearInterval(timer);
+    clearInterval(countdownTimer);
     countdown.textContent = '';
     // Must be called straight from the click.
     if (await browser.permissions.request(ALL_SITES)) void start();
   });
 }
 
-async function loadAlbum(route: ViewerRoute) {
+async function loadAlbum(route: ViewerRoute, gen: number) {
   const [albums, images, videos] = await Promise.all([fallbacks('album'), fallbacks('image'), fallbacks('video')]);
+  if (gen !== generation) return;
   const best = albums.instances[0] ?? null;
   if (!albums.allSites) return showNeedsAccess(route, best);
 
+  // Two mirrors agreeing on "not found" is enough; one could be misconfigured.
+  let notFound = 0;
   for (const instance of albums.instances.slice(0, MAX_PAGE_TRIES)) {
     show(h('p', { class: 'muted' }, `Loading from ${hostOf(instance)}…`));
     const page = await fetchPage(rimgoRouteUrl(instance, route));
-    if (!page) {
+    if (gen !== generation) return;
+    if (!page || (page.status >= 400 && page.status !== 404)) {
       report(instance, false, 'album');
       continue;
     }
     const parsed = parseRimgoPost(page.text);
-    if (parsed.ok) {
+    if (parsed.ok && page.status === 200) {
       report(instance, true, 'album');
       return renderAlbum(route, parsed.album, instance, images.instances, videos.instances);
     }
-    if (parsed.reason === 'not-found') {
+    if (page.status === 404 && !parsed.ok && parsed.reason === 'not-found') {
       report(instance, true, 'album');
+      if (++notFound < 2) continue;
       setBar(route, `Checked on rimgo mirror ${hostOf(instance)}`, rimgoRouteUrl(instance, route));
       return show(
         h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")),
@@ -324,23 +360,24 @@ async function loadAlbum(route: ViewerRoute) {
   // Every mirror we could read is blocked, rate limited or behind a bot check.
   // Opening one as a normal page lets the browser deal with those checks.
   const rimgoUrl = best ? rimgoRouteUrl(best, route) : null;
+  const sent = !!rimgoUrl && !embed && goToMirror(rimgoUrl);
   setBar(route, 'ImgurPass', rimgoUrl);
   show(
     h(
       'section',
       { class: 'notice' },
-      h('h2', {}, rimgoUrl ? `Opening on ${hostOf(best!)}…` : 'No mirror could load this'),
-      h('p', {}, rimgoUrl ? "The mirrors wouldn't let ImgurPass read this album, so it opens on rimgo instead." : 'No rimgo mirror is working right now. Try again later.'),
+      h('h2', {}, sent ? `Opening on ${hostOf(best!)}…` : rimgoUrl ? "Couldn't read this album here" : 'No mirror could load this'),
+      h('p', {}, rimgoUrl ? "The mirrors wouldn't let ImgurPass read this album. You can open it on rimgo instead." : 'No rimgo mirror is working right now. Try again later.'),
       rimgoUrl ? h('div', { class: 'actions' }, h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, 'Open on rimgo')) : null,
     ),
   );
-  if (rimgoUrl && !embed) goToMirror(rimgoUrl);
 }
 
 // ---------- single video ----------
 
-async function loadVideo(route: Extract<ViewerRoute, { kind: 'media' }>) {
+async function loadVideo(route: Extract<ViewerRoute, { kind: 'media' }>, gen: number) {
   const videos = await fallbacks('video');
+  if (gen !== generation) return;
   const best = videos.instances[0] ?? null;
   const rimgoUrl = best ? rimgoRouteUrl(best, route) : null;
   setBar(route, 'Imgur video through rimgo', rimgoUrl);
@@ -363,13 +400,16 @@ async function loadVideo(route: Extract<ViewerRoute, { kind: 'media' }>) {
 // ---------- start ----------
 
 async function start() {
+  const gen = ++generation;
+  clearInterval(countdownTimer);
+  if (lightbox.open) lightbox.close();
   const route = parseViewerRoute(location.hash);
   if (!route) {
     show(h('section', { class: 'notice' }, h('h2', {}, 'Nothing to show'), h('p', {}, "This link doesn't point to an Imgur album, post or video.")));
     return;
   }
-  if (route.kind === 'media') await loadVideo(route);
-  else await loadAlbum(route);
+  if (route.kind === 'media') await loadVideo(route, gen);
+  else await loadAlbum(route, gen);
 }
 
 window.addEventListener('hashchange', () => void start());

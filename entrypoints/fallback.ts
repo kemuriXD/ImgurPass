@@ -123,6 +123,11 @@ export default defineUnlistedScript(() => {
       el instanceof HTMLVideoElement ? 'loadeddata' : 'load',
       () => {
         if (currentSrc(el) !== next) return;
+        // A mirror that is itself blocked serves Imgur's region placeholder: try the next one.
+        if (el instanceof HTMLImageElement && el.naturalWidth === 336 && el.naturalHeight === 478) {
+          void onError(el);
+          return;
+        }
         el.dataset.imgurpass = 'rimgo';
         void send({ type: 'instance-result', instance, ok: true, capability });
       },
