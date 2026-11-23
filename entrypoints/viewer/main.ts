@@ -8,7 +8,7 @@ import { duckDuckGoUrl, rimgoMediaUrl } from '@/lib/imgur-url';
 import type { Capability } from '@/lib/instances';
 import { ALL_SITES, type BackgroundMessage, type FallbacksReply } from '@/lib/messages';
 import { parseRimgoPost, type Album, type AlbumMedia } from '@/lib/rimgo-parse';
-import { IMGURPASS_SERVER, IMGURPASS_SERVER_HOSTS } from '@/lib/server';
+import { IMGURPASS_SERVER, IMGURPASS_SERVER_HOSTS, isServerUrl, openOnLabel } from '@/lib/server';
 import { imgurRouteUrl, parseViewerRoute, rimgoRouteUrl, type ViewerRoute } from '@/lib/viewer-route';
 
 const MAX_PAGE_TRIES = 4;
@@ -71,7 +71,10 @@ function setBar(route: ViewerRoute, source: string, rimgoUrl: string | null) {
   $('copy-page').replaceWith(Object.assign(copyButton('Copy Imgur link', imgurRouteUrl(route)), { id: 'copy-page' }));
   const open = $<HTMLAnchorElement>('open-rimgo');
   open.hidden = !rimgoUrl;
-  if (rimgoUrl) open.href = rimgoUrl;
+  if (rimgoUrl) {
+    open.href = rimgoUrl;
+    open.textContent = openOnLabel(rimgoUrl);
+  }
 }
 
 function show(...nodes: Child[]) {
@@ -137,7 +140,7 @@ function failedBox(what: string, rimgoUrl: string | null): HTMLElement {
     'div',
     { class: 'item-failed' },
     h('span', {}, `This ${what} didn't load from any mirror.`),
-    rimgoUrl ? h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: '_blank', rel: 'noreferrer' }, 'Open on rimgo') : null,
+    rimgoUrl ? h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: '_blank', rel: 'noreferrer' }, openOnLabel(rimgoUrl)) : null,
   );
 }
 
@@ -255,7 +258,7 @@ function renderAlbum(route: ViewerRoute, album: Album, instance: string, images:
       { class: 'notice', 'aria-label': 'If an item will not load' },
       h('h2', {}, "If an item won't load"),
       h('p', {}, 'ImgurPass already tried the other working mirrors. You can open the album on rimgo yourself, or try again later.'),
-      h('div', { class: 'actions' }, h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: '_blank', rel: 'noreferrer' }, 'Open on rimgo')),
+      h('div', { class: 'actions' }, h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: '_blank', rel: 'noreferrer' }, openOnLabel(rimgoUrl))),
     ),
   );
 }
@@ -285,7 +288,7 @@ function showNeedsAccess(route: ViewerRoute, best: string | null) {
   const rimgoUrl = best ? rimgoRouteUrl(best, route) : null;
   setBar(route, 'ImgurPass', rimgoUrl);
   const grant = h('button', { type: 'button', class: 'btn btn-primary btn-lg' }, 'Show albums here');
-  const open = rimgoUrl ? h('a', { class: 'btn btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, 'Open on rimgo now') : null;
+  const open = rimgoUrl ? h('a', { class: 'btn btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, `${openOnLabel(rimgoUrl)} now`) : null;
   const countdown = h('p', {});
   show(
     h(
@@ -420,7 +423,7 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
       h(
         'div',
         { class: 'actions' },
-        rimgoUrl ? h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, 'Open on rimgo') : null,
+        rimgoUrl ? h('a', { class: 'btn btn-primary btn-lg', href: rimgoUrl, target: embed ? '_blank' : '_self', rel: 'noreferrer' }, openOnLabel(rimgoUrl)) : null,
         rimgoUrl && !embed ? stay : null,
         retry,
       ),
@@ -451,7 +454,7 @@ async function loadVideo(route: Extract<ViewerRoute, { kind: 'media' }>, gen: nu
   if (gen !== generation) return;
   const best = videos.instances[0] ?? null;
   const rimgoUrl = best ? rimgoRouteUrl(best, route) : null;
-  setBar(route, 'Imgur video through rimgo', rimgoUrl);
+  setBar(route, isServerUrl(rimgoUrl) ? 'Imgur video through the ImgurPass server' : 'Imgur video through rimgo', rimgoUrl);
   document.title = 'Imgur video · ImgurPass';
   const video = h('video', { controls: '', loop: '', autoplay: '', muted: '', playsinline: '', 'aria-label': 'Imgur video' });
   video.muted = true;

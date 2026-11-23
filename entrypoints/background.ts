@@ -2,6 +2,7 @@ import { storage } from '#imports';
 import { browser, type Browser } from 'wxt/browser';
 import { API_PROBE_URL, detect, isRegionError, PROBE_ID, PROBE_SIZE, PROBE_URL, type Size } from '@/lib/detect';
 import { setRules } from '@/lib/dnr';
+import type { HealthMap } from '@/lib/instances';
 import { fetchHtml } from '@/lib/fetch-page';
 import { duckDuckGoUrl } from '@/lib/imgur-url';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/lib/messages';
 import { missingRequiredHosts } from '@/lib/permissions';
 import { fetchImageSize, loadImageSize } from '@/lib/probe';
+import { IMGURPASS_SERVER } from '@/lib/server';
 import { grantedSites, isPaused, siteHost, sitePattern } from '@/lib/sites';
 import { detectionItem, getSettings, isActive, settingsItem, type Settings } from '@/lib/state';
 
@@ -199,6 +201,12 @@ async function ensureAlarms() {
   }
 }
 
+async function serverHealth(health: HealthMap): Promise<boolean | null> {
+  if (!(await getSettings()).useImgurPassServer) return null;
+  const h = health[IMGURPASS_SERVER];
+  return h && h.checkedAt > 0 ? h.ok : null;
+}
+
 async function status(): Promise<StatusReply> {
   const health = await healthItem.getValue();
   const instances = await getInstances();
@@ -209,6 +217,7 @@ async function status(): Promise<StatusReply> {
     missingHosts: await missingRequiredHosts(),
     healthyInstances: instances.filter((i) => health[i.url]?.ok && health[i.url]!.checkedAt > 0).length,
     knownInstances: instances.length,
+    serverOk: await serverHealth(health),
     listUpdatedAt: (await instanceListItem.getValue()).fetchedAt,
     grantedSites: await singleSites(),
   };

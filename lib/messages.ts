@@ -31,6 +31,8 @@ export interface StatusReply {
   missingHosts: string[];
   healthyInstances: number;
   knownInstances: number;
+  /** ImgurPass server health: null while the setting is off or before its first check. */
+  serverOk: boolean | null;
   /** When the public mirror list was last downloaded (0: using the bundled copy). */
   listUpdatedAt: number;
   /** Sites the user allowed one at a time, as hostnames. */

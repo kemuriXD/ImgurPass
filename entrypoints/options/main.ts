@@ -133,7 +133,8 @@ function renderSources(s: StatusReply, focus?: ImageSource) {
   $('sources').replaceChildren(...rows);
 
   const updated = s.listUpdatedAt ? `list updated ${formatWhen(s.listUpdatedAt).replace(/ at .*/, '')}` : 'built-in list';
-  $('mirror-count').textContent = `${s.healthyInstances} of ${s.knownInstances} rimgo mirrors working · ${updated}`;
+  const server = s.serverOk === null ? '' : `ImgurPass server ${s.serverOk ? 'working' : 'not answering'} · `;
+  $('mirror-count').textContent = `${server}${s.healthyInstances} of ${s.knownInstances} rimgo mirrors working · ${updated}`;
 }
 
 async function render() {

@@ -40,7 +40,7 @@ function renderStats(stats: PageStats) {
       'dl',
       { class: 'breakdown' },
       row('Through DuckDuckGo', stats.duckduckgo),
-      row('Through a rimgo mirror', stats.rimgo),
+      row('Through the ImgurPass server or rimgo', stats.rimgo),
       row("Couldn't load", stats.failed),
     ),
   );

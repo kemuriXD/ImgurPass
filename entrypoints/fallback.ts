@@ -13,6 +13,7 @@ import {
   type PageStats,
   type PageStatsMessage,
 } from '@/lib/messages';
+import { isServerUrl } from '@/lib/server';
 
 const PLACEHOLDER = { width: 336, height: 478 };
 
@@ -77,7 +78,7 @@ export default defineUnlistedScript(() => {
     a.href = href;
     a.target = '_blank';
     a.rel = 'noreferrer';
-    a.textContent = 'Open video on rimgo';
+    a.textContent = isServerUrl(href) ? 'Open video on the ImgurPass server' : 'Open video on rimgo';
     a.setAttribute('data-imgurpass-link', '');
     a.style.cssText =
       'display:inline-block;margin:6px 0;padding:8px 12px;border-radius:8px;background:#4B5BDC;color:#fff;font:600 13px system-ui,sans-serif;text-decoration:none';
