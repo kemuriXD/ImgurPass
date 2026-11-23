@@ -13,6 +13,7 @@ ImgurPass checks whether Imgur is blocked for you. If it isn't, ImgurPass stays 
 - **Images** load through the DuckDuckGo image proxy. If that fails, they're retried through public [rimgo](https://codeberg.org/rimgo/rimgo) mirrors.
 - **Videos** load through a rimgo mirror.
 - **Albums, galleries and posts** open in ImgurPass's own viewer, which reads them from a rimgo mirror. Click an image to see it full size. If no mirror answers, you're sent to the album on rimgo instead.
+- **Imgur embeds** on other sites (Imgur's own embed code, or an album in an iframe) show the same viewer in place.
 
 The check runs when the browser starts and every few hours. You can also run it from the toolbar button.
 
