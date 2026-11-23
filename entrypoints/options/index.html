@@ -11,11 +11,22 @@
       dd { margin: 0 0 0.5rem; }
       label { display: block; margin: 0.4rem 0; }
       button { margin: 0.25rem 0.5rem 0.25rem 0; }
+      .warning { border: 2px solid #cf222e; border-radius: 6px; padding: 0.5rem 1rem; margin: 1rem 0; }
+      .warning ul { margin: 0.25rem 0; }
     </style>
   </head>
   <body>
     <h1>ImgurPass</h1>
     <p>Unofficial, not affiliated with Imgur.</p>
+    <div id="access-warning" class="warning" role="alert" hidden>
+      <strong>ImgurPass can't reach some sites it needs.</strong>
+      <p>
+        Site access has been switched off for the sites below, so block detection and image
+        unblocking won't work.
+      </p>
+      <ul id="missing-hosts"></ul>
+      <button id="grant-required">Grant access</button>
+    </div>
     <dl>
       <dt>Block status</dt>
       <dd id="status">…</dd>

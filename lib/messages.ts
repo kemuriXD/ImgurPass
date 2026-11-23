@@ -18,6 +18,8 @@ export interface StatusReply {
   detection: Detection;
   active: boolean;
   allSites: boolean;
+  /** Required host permissions that are currently withheld. */
+  missingHosts: string[];
   healthyInstances: number;
   knownInstances: number;
 }

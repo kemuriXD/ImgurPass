@@ -20,6 +20,7 @@ import {
   type OffscreenProbeMessage,
   type StatusReply,
 } from '@/lib/messages';
+import { missingRequiredHosts } from '@/lib/permissions';
 import { fetchImageSize, loadImageSize } from '@/lib/probe';
 import { detectionItem, getSettings, isActive, settingsItem } from '@/lib/state';
 
@@ -165,6 +166,7 @@ async function status(): Promise<StatusReply> {
     detection: await detectionItem.getValue(),
     active: await currentlyActive(),
     allSites: await hasAllSites(),
+    missingHosts: await missingRequiredHosts(),
     healthyInstances: instances.filter((i) => health[i.url]?.ok).length,
     knownInstances: instances.length,
   };
@@ -217,6 +219,13 @@ export default defineBackground(() => {
       if ((await currentlyActive()) && (await healthIsStale())) await runHealthCheck();
     });
   });
-  browser.permissions.onAdded.addListener(() => void applyState());
+  browser.permissions.onAdded.addListener(async (added) => {
+    // Detection probably failed while Imgur access was withheld: run it again.
+    const required: string[] = browser.runtime.getManifest().host_permissions ?? [];
+    if (added.origins?.some((o) => required.includes(o) || o === ALL_SITES.origins[0])) {
+      if ((await missingRequiredHosts()).length === 0) return void runCycle();
+    }
+    void applyState();
+  });
   browser.permissions.onRemoved.addListener(() => void applyState());
 });

@@ -13,7 +13,19 @@ function render(s: StatusReply | null) {
   $('all-sites').textContent = s.allSites ? 'granted' : 'not granted (only direct i.imgur.com links work)';
   $('instances').textContent = `${s.healthyInstances} healthy of ${s.knownInstances}`;
   $<HTMLButtonElement>('grant').hidden = s.allSites;
+
+  missingHosts = s.missingHosts;
+  $('access-warning').hidden = missingHosts.length === 0;
+  $('missing-hosts').replaceChildren(
+    ...missingHosts.map((host) => {
+      const li = document.createElement('li');
+      li.textContent = host;
+      return li;
+    }),
+  );
 }
+
+let missingHosts: string[] = [];
 
 const ask = (msg: BackgroundMessage) => browser.runtime.sendMessage(msg) as Promise<StatusReply | null>;
 
@@ -46,7 +58,18 @@ async function init() {
     render(await ask({ type: 'get-status' }));
   });
 
-  render(await ask({ type: 'get-status' }));
+  $('grant-required').addEventListener('click', async () => {
+    await browser.permissions.request({ origins: missingHosts });
+    render(await ask({ type: 'get-status' }));
+  });
+
+  // Site access can change on the browser's extension page while this page is open.
+  const refresh = async () => render(await ask({ type: 'get-status' }));
+  browser.permissions.onAdded.addListener(refresh);
+  browser.permissions.onRemoved.addListener(refresh);
+  window.addEventListener('focus', refresh);
+
+  await refresh();
 }
 
 void init();
