@@ -83,6 +83,16 @@
         </div>
         <ol id="sources" class="row-list"></ol>
         <div class="setting">
+          <label class="setting-text" for="server">
+            <span class="setting-title">Use the ImgurPass server</span>
+            <span class="setting-desc">
+              A backup run by the author of ImgurPass, tried before the public rimgo mirrors since so many of them fail.
+              It only gets the Imgur addresses you open (and, like any website, your IP address). No accounts.
+            </span>
+          </label>
+          <input id="server" class="switch" type="checkbox" />
+        </div>
+        <div class="setting">
           <label class="setting-text" for="nodata">
             <span class="setting-title">Only mirrors that don't collect data</span>
             <span class="setting-desc">
@@ -114,7 +124,7 @@
         <h2 id="privacy-h" class="card-title">Privacy</h2>
         <p class="muted">
           No analytics and no accounts. While unblocking is on, the address of each Imgur image you view goes to
-          DuckDuckGo or a rimgo mirror, which fetches it for you. Nothing else leaves your browser. Once a day ImgurPass
+          DuckDuckGo, the ImgurPass server or a rimgo mirror, which fetches it for you. Nothing else leaves your browser. Once a day ImgurPass
           downloads the public mirror list from rimgo.codeberg.page.
         </p>
       </section>

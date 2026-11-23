@@ -4,6 +4,7 @@ import fixture from './fixtures/rimgo-api.json';
 import { BUNDLED_INSTANCES } from '../lib/bundled-instances';
 import {
   checkHealth,
+  extraInstances,
   getInstances,
   getOrderedInstances,
   healthItem,
@@ -25,6 +26,7 @@ import {
   type HealthMap,
   type Instance,
 } from '../lib/instances';
+import { IMGURPASS_SERVER } from '../lib/server';
 import { DEFAULT_SETTINGS } from '../lib/state';
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -144,6 +146,63 @@ describe('orderInstances', () => {
     expect(h['https://a.example']).toEqual({ ok: true, checkedAt: 7, failures: 0, album: { ok: true, at: 5, failures: 0 } });
   });
 
+  it('puts the preferred instance first for every use, even though it is not listed', () => {
+    for (const capability of ['image', 'video', 'album'] as const) {
+      expect(
+        orderInstances(list, health, { onlyNoData: false, capability, preferred: 'https://server.example', random: noShuffle }),
+      ).toEqual([
+        'https://server.example',
+        ...orderInstances(list, health, { onlyNoData: false, capability, random: noShuffle }),
+      ]);
+    }
+  });
+
+  it('keeps the preferred instance when only no-data mirrors are used, and lists it once', () => {
+    const listed = orderInstances(list, health, { onlyNoData: true, preferred: 'https://b.example', random: noShuffle });
+    expect(listed).toEqual(['https://b.example', 'https://c.example', 'https://e.example', 'https://a.example']);
+  });
+
+  it('keeps the custom instance last and the preferred one first among the rest', () => {
+    expect(
+      orderInstances(list, health, {
+        onlyNoData: true,
+        customInstance: 'my.rimgo.example',
+        preferred: 'https://server.example',
+        random: noShuffle,
+      }),
+    ).toEqual(['https://server.example', 'https://c.example', 'https://e.example', 'https://a.example', 'https://my.rimgo.example']);
+  });
+
+  it('moves a down preferred instance behind the working ones, but never drops it', () => {
+    const down: HealthMap = { ...health, 'https://server.example': { ok: false, checkedAt: 99, failures: 3 } };
+    expect(orderInstances(list, down, { onlyNoData: false, preferred: 'https://server.example', random: noShuffle })).toEqual([
+      'https://c.example',
+      'https://b.example',
+      'https://e.example',
+      'https://d.example',
+      'https://server.example',
+      'https://a.example',
+    ]);
+    const allDown: HealthMap = Object.fromEntries(
+      [...list.map((i) => i.url), 'https://server.example'].map((url) => [url, { ok: false, checkedAt: 1, failures: 3 }]),
+    );
+    const ordered = orderInstances(list, allDown, { onlyNoData: false, preferred: 'https://server.example', random: noShuffle });
+    expect(ordered[0]).toBe('https://server.example');
+    expect(ordered).toHaveLength(1 + LAST_RESORT_COUNT);
+  });
+
+  it('benches a preferred instance for videos like any mirror', () => {
+    const now = 10 * CAPABILITY_RETRY_MS;
+    const benched: HealthMap = {
+      ...health,
+      'https://server.example': { ok: true, checkedAt: 1, failures: 0, video: { ok: false, at: now - 1 } },
+    };
+    const opts = { onlyNoData: false, preferred: 'https://server.example', now, random: noShuffle };
+    expect(orderInstances(list, benched, { ...opts, capability: 'video' })[0]).toBe('https://c.example');
+    // Still first for images, which it serves.
+    expect(orderInstances(list, benched, opts)[0]).toBe('https://server.example');
+  });
+
   it('shuffles within a group to spread load', () => {
     const many: Instance[] = Array.from({ length: 6 }, (_, i) => ({ url: `https://i${i}.example`, noData: true }));
     const seen = new Set<string>();
@@ -198,11 +257,56 @@ describe('instance manager', () => {
     expect(health['https://rimgo.canine.tools']?.ok).toBe(false);
     expect(health['https://my.rimgo.example']?.ok).toBe(true);
 
-    const ordered = await getOrderedInstances({ ...DEFAULT_SETTINGS, customInstance: 'my.rimgo.example' });
+    const ordered = await getOrderedInstances({ ...DEFAULT_SETTINGS, customInstance: 'my.rimgo.example', useImgurPassServer: false });
     // Working mirror first, custom last, a few down ones in between as a last resort.
     expect(ordered[0]).toBe('https://ri.bcow.xyz');
     expect(ordered.at(-1)).toBe('https://my.rimgo.example');
     expect(ordered).toHaveLength(2 + LAST_RESORT_COUNT);
+  });
+
+  it('tries the ImgurPass server first while it is on, and not at all when it is off', async () => {
+    await refreshInstanceList((async () => jsonResponse(fixture)) as unknown as typeof fetch);
+    await healthItem.setValue({ 'https://ri.bcow.xyz': { ok: true, checkedAt: 1, failures: 0 } });
+    const on = { ...DEFAULT_SETTINGS, customInstance: 'my.rimgo.example' };
+    expect(DEFAULT_SETTINGS.useImgurPassServer).toBe(true);
+    for (const capability of ['image', 'video', 'album'] as const) {
+      const ordered = await getOrderedInstances(on, capability);
+      expect(ordered[0]).toBe(IMGURPASS_SERVER);
+      expect(ordered[1]).toBe('https://ri.bcow.xyz');
+      expect(ordered.at(-1)).toBe('https://my.rimgo.example');
+
+      const off = await getOrderedInstances({ ...on, useImgurPassServer: false }, capability);
+      expect(off).not.toContain(IMGURPASS_SERVER);
+      expect(off[0]).toBe('https://ri.bcow.xyz');
+      expect(off.at(-1)).toBe('https://my.rimgo.example');
+    }
+  });
+
+  it('health-checks the ImgurPass server only while it is on', async () => {
+    expect(extraInstances({ useImgurPassServer: true, customInstance: 'my.rimgo.example' })).toEqual([
+      IMGURPASS_SERVER,
+      'https://my.rimgo.example',
+    ]);
+    expect(extraInstances({ useImgurPassServer: false, customInstance: '' })).toEqual([]);
+
+    const probe = vi.fn(async (url: string) => (url.startsWith(`${IMGURPASS_SERVER}/`) ? { width: 1800, height: 1200 } : null));
+    const health = await checkHealth(probe, extraInstances(DEFAULT_SETTINGS), 5);
+    expect(probe).toHaveBeenCalledWith(`${IMGURPASS_SERVER}/OB0y6MR.jpg`);
+    expect(health[IMGURPASS_SERVER]?.ok).toBe(true);
+
+    probe.mockClear();
+    await checkHealth(probe, extraInstances({ ...DEFAULT_SETTINGS, useImgurPassServer: false }), 6);
+    expect(probe).not.toHaveBeenCalledWith(`${IMGURPASS_SERVER}/OB0y6MR.jpg`);
+  });
+
+  it('falls back from a down ImgurPass server like any mirror', async () => {
+    await healthItem.setValue({
+      [IMGURPASS_SERVER]: { ok: false, checkedAt: 1, failures: 3 },
+      'https://ri.bcow.xyz': { ok: true, checkedAt: 1, failures: 0 },
+    });
+    const ordered = await getOrderedInstances(DEFAULT_SETTINGS, 'video');
+    expect(ordered[0]).toBe('https://ri.bcow.xyz');
+    expect(ordered).toContain(IMGURPASS_SERVER);
   });
 
   it('needs several page failures before an instance is down, and one success to recover', async () => {

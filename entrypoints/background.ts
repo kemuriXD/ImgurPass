@@ -3,9 +3,10 @@ import { browser, type Browser } from 'wxt/browser';
 import { API_PROBE_URL, detect, isRegionError, PROBE_ID, PROBE_SIZE, PROBE_URL, type Size } from '@/lib/detect';
 import { setRules } from '@/lib/dnr';
 import { fetchHtml } from '@/lib/fetch-page';
-import { duckDuckGoUrl, normalizeInstance } from '@/lib/imgur-url';
+import { duckDuckGoUrl } from '@/lib/imgur-url';
 import {
   checkHealth,
+  extraInstances,
   getInstances,
   getOrderedInstances,
   healthItem,
@@ -162,7 +163,7 @@ let healthRun: Promise<unknown> | null = null;
 function runHealthCheck() {
   healthRun ??= (async () => {
     const settings = await getSettings();
-    await withHealthProbe((probe) => checkHealth(probe, settings.customInstance));
+    await withHealthProbe((probe) => checkHealth(probe, extraInstances(settings)));
     // The embedded-video rule points at a specific mirror: pick from fresh results.
     await applyState();
   })()
@@ -259,9 +260,7 @@ async function fetchMirrorPage(url: string, sender: Browser.runtime.MessageSende
   } catch {
     return null;
   }
-  const known = new Set((await getInstances()).map((i) => i.url));
-  const custom = normalizeInstance((await getSettings()).customInstance);
-  if (custom) known.add(custom);
+  const known = new Set([...(await getInstances()).map((i) => i.url), ...extraInstances(await getSettings())]);
   if (!known.has(origin)) return null;
   return fetchHtml(url, PAGE_FETCH_TIMEOUT_MS);
 }

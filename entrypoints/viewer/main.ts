@@ -8,6 +8,7 @@ import { duckDuckGoUrl, rimgoMediaUrl } from '@/lib/imgur-url';
 import type { Capability } from '@/lib/instances';
 import { ALL_SITES, type BackgroundMessage, type FallbacksReply } from '@/lib/messages';
 import { parseRimgoPost, type Album, type AlbumMedia } from '@/lib/rimgo-parse';
+import { IMGURPASS_SERVER, IMGURPASS_SERVER_HOSTS } from '@/lib/server';
 import { imgurRouteUrl, parseViewerRoute, rimgoRouteUrl, type ViewerRoute } from '@/lib/viewer-route';
 
 const MAX_PAGE_TRIES = 4;
@@ -316,18 +317,27 @@ function showNotFound(route: ViewerRoute, instance: string) {
   show(h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")));
 }
 
+/** Mirrors whose pages the viewer may read. Without all-sites access, only the ImgurPass server's. */
+async function readableMirrors(albums: FallbacksReply): Promise<string[]> {
+  if (albums.allSites) return albums.instances;
+  if (!albums.instances.includes(IMGURPASS_SERVER)) return [];
+  const granted = await browser.permissions.contains({ origins: [IMGURPASS_SERVER_HOSTS] }).catch(() => false);
+  return granted ? [IMGURPASS_SERVER] : [];
+}
+
 async function loadAlbum(route: ViewerRoute, gen: number) {
   const [albums, images, videos] = await Promise.all([fallbacks('album'), fallbacks('image'), fallbacks('video')]);
+  const readable = await readableMirrors(albums);
   if (gen !== generation) return;
   const best = albums.instances[0] ?? null;
-  if (!albums.allSites) return showNeedsAccess(route, best);
+  if (readable.length === 0) return showNeedsAccess(route, best);
 
   // Two mirrors agreeing on "not found" is enough; one could be misconfigured.
   let notFound = 0;
   const attempts: { host: string; result: string }[] = [];
   let challenged: string | undefined;
   let notFoundAt: string | undefined;
-  for (const instance of albums.instances.slice(0, MAX_PAGE_TRIES)) {
+  for (const instance of readable.slice(0, MAX_PAGE_TRIES)) {
     show(h('p', { class: 'muted' }, `Loading from ${hostOf(instance)}…`));
     const page = await fetchPage(rimgoRouteUrl(instance, route));
     if (gen !== generation) return;
@@ -373,6 +383,8 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
   // One mirror said "not found" and none of the others could answer at all:
   // believe it rather than sending the reader to a mirror that can't help.
   if (notFoundAt) return showNotFound(route, notFoundAt);
+  // The ImgurPass server couldn't help, and the public mirrors need all-sites access.
+  if (!albums.allSites) return showNeedsAccess(route, albums.instances.find((url) => !readable.includes(url)) ?? best);
 
   // Every mirror we tried is blocked, rate limited or behind a bot check.
   // Opening one as a normal page lets the browser deal with its check; after

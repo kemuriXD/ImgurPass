@@ -10,12 +10,14 @@ ImgurPass is unofficial. It isn't made by, affiliated with or endorsed by Imgur.
 
 ImgurPass checks whether Imgur is blocked for you. If it isn't, ImgurPass stays idle and changes nothing. If it is:
 
-- **Images** load through the DuckDuckGo image proxy. If that fails, they're retried through public [rimgo](https://codeberg.org/rimgo/rimgo) mirrors.
-- **Videos** load through a rimgo mirror.
-- **Albums, galleries and posts** open in ImgurPass's own viewer, which reads them from a rimgo mirror. Click an image to see it full size. If no mirror answers, you're sent to the album on rimgo instead.
+- **Images** load through the DuckDuckGo image proxy. If that fails, they're retried through the ImgurPass server, then public [rimgo](https://codeberg.org/rimgo/rimgo) mirrors.
+- **Videos** load through the ImgurPass server or a rimgo mirror.
+- **Albums, galleries and posts** open in ImgurPass's own viewer, which reads them from the ImgurPass server or a rimgo mirror. Click an image to see it full size. If no mirror answers, you're sent to the album on rimgo instead.
 - **Imgur embeds** on other sites (Imgur's own embed code, or an album in an iframe) show the same viewer in place.
 
 The check runs when the browser starts and every few hours. You can also run it from the toolbar button.
+
+The ImgurPass server is a backup run by the author of ImgurPass, because public rimgo mirrors are often down. It answers like a rimgo mirror and is tried before the public ones. You can turn it off in settings; then only DuckDuckGo and the public mirrors are used.
 
 ## Install
 
@@ -36,6 +38,7 @@ The settings page has the rest:
 - Always proxy, for networks that block Imgur in a way the check misses
 - Sites you've paused, and sites you've allowed one at a time
 - Whether images try DuckDuckGo or rimgo first
+- Whether to use the ImgurPass server
 - Only using rimgo mirrors that say they don't collect data
 - Your own rimgo mirror, with a button to test it
 
@@ -58,23 +61,24 @@ You can allow ImgurPass on every site ("Fix embeds everywhere"), or only on the 
 | `imgur.com`, `*.imgur.com` | Checks whether Imgur is blocked, and redirects its requests. |
 | `external-content.duckduckgo.com` | Checks the image proxy works. |
 | `rimgo.codeberg.page` | Downloads the public rimgo mirror list. |
+| `imgurpass.kemurixd.workers.dev` | Reads album pages from the ImgurPass server, even without access to all sites. |
 | All sites (optional) | Fixes Imgur images embedded on other sites, and reads album pages from mirrors in the viewer. Only asked for when you choose it. |
 
 ## Privacy
 
 There are no analytics, crash reports or accounts.
 
-While Imgur is blocked (or Always proxy is on), the address of each Imgur image, video or album you open goes to DuckDuckGo or to a rimgo mirror, which fetches it for you. They also see your IP address, as with any website. Nothing about the pages you visit is sent anywhere. Firefox lists this as sharing "website content" when you install ImgurPass.
+While Imgur is blocked (or Always proxy is on), the address of each Imgur image, video or album you open goes to DuckDuckGo, the ImgurPass server or a rimgo mirror, which fetches it for you. They also see your IP address, as with any website. Nothing about the pages you visit is sent anywhere. Firefox lists this as sharing "website content" when you install ImgurPass.
 
-When Imgur isn't blocked, nothing goes to the proxies. The one exception: if Imgur doesn't answer the check at all, ImgurPass loads one test image through DuckDuckGo to tell a block from an outage. While unblocking is on, it also loads a test image from each rimgo mirror every few hours to see which ones work. Once a day ImgurPass downloads the public mirror list from `rimgo.codeberg.page`.
+When Imgur isn't blocked, nothing goes to the proxies. The one exception: if Imgur doesn't answer the check at all, ImgurPass loads one test image through DuckDuckGo to tell a block from an outage. While unblocking is on, it also loads a test image from each rimgo mirror (and the ImgurPass server) every few hours to see which ones work. Once a day ImgurPass downloads the public mirror list from `rimgo.codeberg.page`.
 
-DuckDuckGo and each rimgo mirror have their own privacy policies.
+DuckDuckGo and each rimgo mirror have their own privacy policies. The ImgurPass server only gets the Imgur addresses you open (and, like any website, your IP address). It has no accounts.
 
 ## Known limits
 
 - Public rimgo mirrors come and go. Many sit behind bot checks or are rate-limited by Imgur, so some days only one or two work. ImgurPass checks them regularly and tries the working ones first. If you can, run your own mirror and add it in settings.
 - A mirror's bot check has to be passed in a normal tab before the viewer can read albums from it. If an album opens on rimgo instead of the viewer, that's usually why. After you've passed the check once, it opens in the viewer again.
-- DuckDuckGo only proxies images, so videos and albums depend on rimgo.
+- DuckDuckGo only proxies images, so videos and albums depend on the ImgurPass server and rimgo.
 
 ## Development
 

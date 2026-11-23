@@ -82,6 +82,11 @@ export function shuffle<T>(items: readonly T[], random: () => number = Math.rand
 export interface OrderOptions {
   onlyNoData: boolean;
   customInstance?: string;
+  /**
+   * Tried before the public mirrors, whether or not it is in the list. If it is
+   * down, it goes first among the last resorts instead. Never dropped.
+   */
+  preferred?: string;
   /** Defaults to "image". */
   capability?: Capability;
   now?: number;
@@ -111,27 +116,35 @@ function rank(h: Health | undefined, capability: Capability, now: number): { r: 
  * Instances to try, best first. Known good before untested; within each, "data
  * not collected" first; each group shuffled to spread load. Then, as a last
  * resort, a few down instances (they may have recovered since), so the list is
- * never empty while any instance exists. The user's custom instance comes last.
+ * never empty while any instance exists. The preferred instance goes before all
+ * the public ones, and the user's custom instance comes last.
  */
 export function orderInstances(list: readonly Instance[], health: HealthMap, opts: OrderOptions): string[] {
   const random = opts.random ?? Math.random;
   const capability = opts.capability ?? 'image';
   const now = opts.now ?? Date.now();
+  const preferred = opts.preferred ? normalizeInstance(opts.preferred) : null;
   const groups: Instance[][] = [[], [], [], [], [], []];
   const down: { url: string; failedAt: number }[] = [];
   for (const inst of list) {
+    if (inst.url === preferred) continue;
     if (opts.onlyNoData && !inst.noData) continue;
     const { r, failedAt } = rank(health[inst.url], capability, now);
     if (r === 'down') down.push({ url: inst.url, failedAt });
     else groups[r * 2 + (inst.noData ? 0 : 1)]!.push(inst);
   }
-  const ordered = [
-    ...groups.flatMap((g) => shuffle(g, random).map((i) => i.url)),
-    ...down
-      .sort((a, b) => a.failedAt - b.failedAt)
-      .slice(0, LAST_RESORT_COUNT)
-      .map((d) => d.url),
-  ];
+  const working = groups.flatMap((g) => shuffle(g, random).map((i) => i.url));
+  const lastResort = down
+    .sort((a, b) => a.failedAt - b.failedAt)
+    .slice(0, LAST_RESORT_COUNT)
+    .map((d) => d.url);
+  let ordered = [...working, ...lastResort];
+  if (preferred) {
+    ordered =
+      rank(health[preferred], capability, now).r === 'down'
+        ? [...working, preferred, ...lastResort]
+        : [preferred, ...ordered];
+  }
 
   const custom = opts.customInstance ? normalizeInstance(opts.customInstance) : null;
   if (custom) return [...ordered.filter((u) => u !== custom), custom];

@@ -14,6 +14,7 @@ import {
   type HealthMap,
   type Instance,
 } from './instances';
+import { IMGURPASS_SERVER } from './server';
 import type { Settings } from './state';
 
 interface StoredList {
@@ -61,19 +62,28 @@ export async function getInstances(): Promise<Instance[]> {
 
 export type ImageSizeProbe = (url: string) => Promise<Size | null>;
 
+/** Instances used besides the public list: the ImgurPass server (when on) and the user's own. */
+export function extraInstances(settings: Pick<Settings, 'useImgurPassServer' | 'customInstance'>): string[] {
+  const custom = normalizeInstance(settings.customInstance);
+  return [...(settings.useImgurPassServer ? [IMGURPASS_SERVER] : []), ...(custom ? [custom] : [])];
+}
+
 /**
- * Load the known probe image through every instance (and the custom one) and
- * record which ones serve it at its real size. A placeholder or error means down.
+ * Load the known probe image through every instance (and the extra ones, like
+ * the custom one) and record which ones serve it at its real size. A
+ * placeholder or error means down.
  */
 export async function checkHealth(
   probe: ImageSizeProbe,
-  customInstance = '',
+  extra: string | readonly string[] = [],
   now = Date.now(),
   concurrency = 4,
 ): Promise<HealthMap> {
   const urls = (await getInstances()).map((i) => i.url);
-  const custom = normalizeInstance(customInstance);
-  if (custom && !urls.includes(custom)) urls.push(custom);
+  for (const raw of typeof extra === 'string' ? [extra] : extra) {
+    const url = normalizeInstance(raw);
+    if (url && !urls.includes(url)) urls.push(url);
+  }
 
   let next = 0;
   const worker = async () => {
@@ -94,6 +104,7 @@ export async function getOrderedInstances(settings: Settings, capability: Capabi
   return orderInstances(await getInstances(), await healthItem.getValue(), {
     onlyNoData: settings.onlyNoDataInstances,
     customInstance: settings.customInstance,
+    preferred: settings.useImgurPassServer ? IMGURPASS_SERVER : undefined,
     capability,
   });
 }

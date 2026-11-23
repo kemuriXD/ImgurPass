@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import { IMGURPASS_SERVER_HOSTS } from './lib/server';
 
 export default defineConfig({
   manifestVersion: 3,
@@ -20,6 +21,8 @@ export default defineConfig({
       '*://*.imgur.com/*',
       'https://external-content.duckduckgo.com/*',
       'https://rimgo.codeberg.page/*',
+      // Lets the viewer read album pages from the ImgurPass server without all-sites access.
+      IMGURPASS_SERVER_HOSTS,
     ],
     optional_host_permissions: ['*://*/*'],
     action: { default_icon: { 16: 'icon/16.png', 32: 'icon/32.png', 48: 'icon/48.png' } },
@@ -32,7 +35,7 @@ export default defineConfig({
             gecko: {
               id: 'imgurpass@kemurixd',
               strict_min_version: '140.0',
-              // Imgur media addresses go to DuckDuckGo or a rimgo mirror, which fetch them.
+              // Imgur media addresses go to DuckDuckGo, the ImgurPass server or a rimgo mirror, which fetch them.
               data_collection_permissions: { required: ['websiteContent'] },
             },
           },

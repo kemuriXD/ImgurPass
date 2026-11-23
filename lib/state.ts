@@ -17,6 +17,8 @@ export interface Settings {
   onlyNoDataInstances: boolean;
   /** User's own rimgo instance, tried after the healthy public ones. Empty when unset. */
   customInstance: string;
+  /** Try the ImgurPass server before the public mirrors (after DuckDuckGo for images). */
+  useImgurPassServer: boolean;
   /** Where images go first. The other is tried when that fails. */
   imageSource: ImageSource;
   /** Hostnames where the user paused ImgurPass. Subdomains are paused too. */
@@ -30,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   alwaysProxy: false,
   onlyNoDataInstances: false,
   customInstance: '',
+  useImgurPassServer: true,
   imageSource: 'duckduckgo',
   pausedSites: [],
 };

@@ -141,6 +141,7 @@ async function render() {
   checkbox('enabled').checked = settings.enabled;
   checkbox('always').checked = settings.alwaysProxy;
   checkbox('nodata').checked = settings.onlyNoDataInstances;
+  checkbox('server').checked = settings.useImgurPassServer;
   // Don't overwrite what someone is typing.
   if (document.activeElement !== $('custom')) $<HTMLInputElement>('custom').value = settings.customInstance;
   renderPaused();
@@ -194,7 +195,7 @@ async function testCustom() {
 async function init() {
   $('version').textContent = `Version ${browser.runtime.getManifest().version}`;
 
-  const toggle = (id: string, key: 'enabled' | 'alwaysProxy' | 'onlyNoDataInstances') =>
+  const toggle = (id: string, key: 'enabled' | 'alwaysProxy' | 'onlyNoDataInstances' | 'useImgurPassServer') =>
     checkbox(id).addEventListener('change', async (e) => {
       settings = await updateSettings({ [key]: (e.target as HTMLInputElement).checked });
       await render();
@@ -202,6 +203,7 @@ async function init() {
   toggle('enabled', 'enabled');
   toggle('always', 'alwaysProxy');
   toggle('nodata', 'onlyNoDataInstances');
+  toggle('server', 'useImgurPassServer');
 
   // permissions.request has to run straight from the click for the prompt to show.
   checkbox('everywhere').addEventListener('change', (e) => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildRules, RULE_IDS, type RuleOptions } from '../lib/dnr';
 import { duckDuckGoUrl } from '../lib/imgur-url';
+import { orderInstances, type Instance } from '../lib/instances';
+import { IMGURPASS_SERVER } from '../lib/server';
 
 const VIEWER = 'chrome-extension://abc/viewer.html';
 const OPTIONS: RuleOptions = { viewerUrl: VIEWER, videoInstance: 'https://ri.example' };
@@ -117,5 +119,27 @@ describe('buildRules options', () => {
     const rules = buildRules({ ...OPTIONS, pausedSites: ['forum.example'] });
     for (const rule of rules) expect(rule.condition.excludedInitiatorDomains).toEqual(['forum.example']);
     for (const rule of buildRules(OPTIONS)) expect(rule.condition.excludedInitiatorDomains).toBeUndefined();
+  });
+});
+
+describe('the ImgurPass server in the rules', () => {
+  const list: Instance[] = [{ url: 'https://ri.example', noData: true }];
+  const health = { 'https://ri.example': { ok: true, checkedAt: 1, failures: 0, video: { ok: true, at: 1 } } };
+  // The background points the embedded-video rule at the first instance for videos.
+  const videoInstance = (preferred?: string) =>
+    orderInstances(list, health, { onlyNoData: false, capability: 'video', preferred, now: 2 })[0] ?? null;
+
+  it('sends embedded videos to the server while it is on, images still to DuckDuckGo', () => {
+    const options = { ...OPTIONS, videoInstance: videoInstance(IMGURPASS_SERVER) };
+    expect(apply('https://i.imgur.com/abcde12.gifv', 'media', options)).toBe(`${IMGURPASS_SERVER}/abcde12.mp4`);
+    expect(apply('https://i.imgur.com/OB0y6MR.png', 'image', options)).toBe(duckDuckGoUrl('OB0y6MR', 'png'));
+  });
+
+  it('sends embedded videos to a public mirror when it is off', () => {
+    const options = { ...OPTIONS, videoInstance: videoInstance() };
+    expect(apply('https://i.imgur.com/abcde12.mp4', 'media', options)).toBe('https://ri.example/abcde12.mp4');
+    for (const rule of buildRules(options)) {
+      expect(rule.action.redirect?.regexSubstitution ?? '').not.toContain(IMGURPASS_SERVER);
+    }
   });
 });
