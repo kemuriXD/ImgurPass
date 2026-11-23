@@ -23,11 +23,12 @@ const MEDIA_HOSTS = new Set(['i.imgur.com']);
 const PAGE_HOSTS = new Set(['imgur.com', 'www.imgur.com', 'm.imgur.com']);
 
 /** First path segments on imgur.com that are site pages, not post ids. */
-const RESERVED = new Set([
+export const RESERVED_PATHS = [
   'about', 'account', 'apps', 'blog', 'download', 'emerald', 'hot', 'jobs',
   'memegen', 'new', 'privacy', 'random', 'register', 'removalrequest', 'rules',
   'search', 'signin', 'tos', 'top', 'upload', 'user', 'vidgif',
-]);
+] as const;
+const RESERVED = new Set<string>(RESERVED_PATHS);
 
 function toUrl(input: string | URL): URL | null {
   if (input instanceof URL) return input;

@@ -1,20 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { buildImageRules, IMAGE_RULE_IDS } from '../lib/dnr';
+import { buildRules, RULE_IDS, type RuleOptions } from '../lib/dnr';
 import { duckDuckGoUrl } from '../lib/imgur-url';
 
-/** Apply a rule the way DNR does: regexFilter + regexSubstitution (\0..\9). */
-function apply(url: string): string | null {
-  for (const rule of buildImageRules()) {
-    const flags = rule.condition.isUrlFilterCaseSensitive === false ? 'i' : '';
-    const m = new RegExp(rule.condition.regexFilter!, flags).exec(url);
-    if (m) return rule.action.redirect!.regexSubstitution!.replace(/\\(\d)/g, (_, n) => m[Number(n)] ?? '');
-  }
-  return null;
+const VIEWER = 'chrome-extension://abc/viewer.html';
+const OPTIONS: RuleOptions = { viewerUrl: VIEWER, videoInstance: 'https://ri.example' };
+
+/**
+ * Apply rules the way DNR does: highest priority wins, an allow rule stops
+ * redirects, regexSubstitution expands \0..\9.
+ */
+function apply(url: string, type: string, options = OPTIONS): string | null {
+  const matching = buildRules(options)
+    .filter((rule) => rule.condition.resourceTypes?.includes(type as never))
+    .filter((rule) => new RegExp(rule.condition.regexFilter!, 'i').test(url))
+    .sort((a, b) => (b.priority ?? 1) - (a.priority ?? 1));
+  const rule = matching[0];
+  if (!rule || rule.action.type === 'allow') return null;
+  const m = new RegExp(rule.condition.regexFilter!, 'i').exec(url)!;
+  return rule.action.redirect!.regexSubstitution!.replace(/\\(\d)/g, (_, n) => m[Number(n)] ?? '');
 }
 
-describe('buildImageRules', () => {
-  it('uses only the ids it owns', () => {
-    expect(buildImageRules().map((r) => r.id)).toEqual([...IMAGE_RULE_IDS]);
+describe('buildRules', () => {
+  it('uses only ids it owns, each once', () => {
+    const ids = buildRules(OPTIONS).map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(RULE_IDS).toContain(id);
   });
 
   it.each([
@@ -25,24 +35,51 @@ describe('buildImageRules', () => {
     ['https://i.imgur.com/OB0y6MR', duckDuckGoUrl('OB0y6MR', 'jpg')],
     ['https://imgur.com/OB0y6MR.gif', duckDuckGoUrl('OB0y6MR', 'gif')],
     ['https://i.imgur.com/OB0y6MR.jpg:large', duckDuckGoUrl('OB0y6MR', 'jpg')],
-  ])('redirects %s', (input, expected) => {
-    expect(apply(input)).toBe(expected);
-  });
-
-  it('keeps the original case of the extension', () => {
-    expect(apply('https://i.imgur.com/OB0y6MR.JPG')).toBe(duckDuckGoUrl('OB0y6MR', 'JPG'));
+  ])('sends image %s to DuckDuckGo', (input, expected) => {
+    expect(apply(input, 'image')).toBe(expected);
+    expect(apply(input, 'main_frame')).toBe(expected);
   });
 
   it.each([
-    'https://i.imgur.com/abcde12.gifv',
-    'https://i.imgur.com/abcde12.mp4',
-    'https://imgur.com/a/AbCd1',
-    'https://imgur.com/gallery/cat-AbCd123',
-    'https://imgur.com/abcde12',
-    'https://i.imgur.com/',
+    ['https://imgur.com/a/AbCd1', `${VIEWER}#a/AbCd1`],
+    ['https://imgur.com/a/AbCd123/embed?pub=true', `${VIEWER}#a/AbCd123`],
+    ['http://www.imgur.com/a/AbCd123?foo=bar', `${VIEWER}#a/AbCd123`],
+    ['https://imgur.com/gallery/funny-cat-AbCd123', `${VIEWER}#gallery/AbCd123`],
+    ['https://imgur.com/gallery/AbCd123', `${VIEWER}#gallery/AbCd123`],
+    ['https://m.imgur.com/abcde12', `${VIEWER}#post/abcde12`],
+    ['https://imgur.com/abcde12/', `${VIEWER}#post/abcde12`],
+    ['https://imgur.com/t/cats/abcde12', `${VIEWER}#post/abcde12`],
+    ['https://imgur.com/r/aww/abcde12', `${VIEWER}#post/abcde12`],
+    ['https://i.imgur.com/abcde12.gifv', `${VIEWER}#media/abcde12.gifv`],
+    ['https://i.imgur.com/abcde12.mp4?x=1', `${VIEWER}#media/abcde12.mp4`],
+    ['https://imgur.com/abcde12.gifv', `${VIEWER}#media/abcde12.gifv`],
+  ])('opens %s in the viewer', (input, expected) => {
+    expect(apply(input, 'main_frame')).toBe(expected);
+    expect(apply(input, 'sub_frame')).toBe(expected);
+  });
+
+  it.each(['https://imgur.com/upload', 'https://imgur.com/signin', 'https://imgur.com/search?q=cats', 'https://imgur.com/', 'https://imgur.com/user/someone'])(
+    'leaves site page %s alone',
+    (input) => {
+      expect(apply(input, 'main_frame')).toBeNull();
+    },
+  );
+
+  it('sends embedded videos to the video instance', () => {
+    expect(apply('https://i.imgur.com/abcde12.mp4', 'media')).toBe('https://ri.example/abcde12.mp4');
+    expect(apply('https://i.imgur.com/abcde12.gifv', 'media')).toBe('https://ri.example/abcde12.mp4');
+    expect(apply('https://i.imgur.com/abcde12.mp4', 'media', { ...OPTIONS, videoInstance: null })).toBeNull();
+  });
+
+  it.each([
     'https://i.imgur.com/abcde12.jpg.png/x',
     'https://example.com/i.imgur.com/abcde12.jpg',
+    'https://imgur.com.evil.example/a/AbCd1',
   ])('leaves %s alone', (input) => {
-    expect(apply(input)).toBeNull();
+    for (const type of ['image', 'main_frame', 'media']) expect(apply(input, type)).toBeNull();
+  });
+
+  it('does not send videos to the image proxy', () => {
+    expect(apply('https://i.imgur.com/abcde12.mp4', 'image')).toBeNull();
   });
 });
