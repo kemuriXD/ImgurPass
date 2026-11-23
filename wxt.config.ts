@@ -23,7 +23,11 @@ export default defineConfig({
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {
-            gecko: { id: 'imgurpass@kemurixd', strict_min_version: '128.0' },
+            gecko: {
+              id: 'imgurpass@kemurixd',
+              strict_min_version: '140.0',
+              data_collection_permissions: { required: ['none'] },
+            },
           },
         }
       : {}),
