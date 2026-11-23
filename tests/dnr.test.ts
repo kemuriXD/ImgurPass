@@ -10,13 +10,15 @@ const OPTIONS: RuleOptions = { viewerUrl: VIEWER, videoInstance: 'https://ri.exa
  * redirects, regexSubstitution expands \0..\9.
  */
 function apply(url: string, type: string, options = OPTIONS): string | null {
+  const re = (rule: ReturnType<typeof buildRules>[number]) =>
+    new RegExp(rule.condition.regexFilter!, rule.condition.isUrlFilterCaseSensitive === false ? 'i' : '');
   const matching = buildRules(options)
     .filter((rule) => rule.condition.resourceTypes?.includes(type as never))
-    .filter((rule) => new RegExp(rule.condition.regexFilter!, 'i').test(url))
+    .filter((rule) => re(rule).test(url))
     .sort((a, b) => (b.priority ?? 1) - (a.priority ?? 1));
   const rule = matching[0];
   if (!rule || rule.action.type === 'allow') return null;
-  const m = new RegExp(rule.condition.regexFilter!, 'i').exec(url)!;
+  const m = re(rule).exec(url)!;
   return rule.action.redirect!.regexSubstitution!.replace(/\\(\d)/g, (_, n) => m[Number(n)] ?? '');
 }
 
@@ -58,7 +60,17 @@ describe('buildRules', () => {
     expect(apply(input, 'sub_frame')).toBe(expected);
   });
 
-  it.each(['https://imgur.com/upload', 'https://imgur.com/signin', 'https://imgur.com/search?q=cats', 'https://imgur.com/', 'https://imgur.com/user/someone'])(
+  it.each([
+    'https://imgur.com/upload',
+    'https://imgur.com/signin',
+    'https://imgur.com/search?q=cats',
+    'https://imgur.com/',
+    'https://imgur.com/user/someone',
+    'https://imgur.com/gallery',
+    'https://imgur.com/settings',
+    'https://imgur.com/somepage',
+    'https://imgur.com/a',
+  ])(
     'leaves site page %s alone',
     (input) => {
       expect(apply(input, 'main_frame')).toBeNull();

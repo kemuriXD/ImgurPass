@@ -42,6 +42,8 @@ function redirect(id: number, regexFilter: string, regexSubstitution: string, ty
   };
 }
 
+const caseSensitive = (rule: Rule): Rule => ({ ...rule, condition: { ...rule.condition, isUrlFilterCaseSensitive: true } });
+
 /**
  * regexSubstitution can't percent-encode, so the rules only capture ids and
  * extensions (all [A-Za-z0-9]) and write any encoded prefix out literally.
@@ -59,7 +61,11 @@ export function buildRules({ viewerUrl, videoInstance }: RuleOptions): Rule[] {
     redirect(10, `${PAGE_HOST}/a/${ID}(?:/embed)?/?(?:[?#].*)?$`, `${viewer}a/\\1`, PAGE_TYPES),
     redirect(11, `${PAGE_HOST}/gallery/(?:[^/?#]*-)?${ID}(?:/embed)?/?(?:[?#].*)?$`, `${viewer}gallery/\\1`, PAGE_TYPES),
     redirect(12, `${PAGE_HOST}/(?:t|r)/[^/?#]+/${ID}/?(?:[?#].*)?$`, `${viewer}post/\\1`, PAGE_TYPES),
-    redirect(13, `${PAGE_HOST}/${ID}(?:/embed)?/?(?:[?#].*)?$`, `${viewer}post/\\1`, PAGE_TYPES),
+    // imgur.com/<id>: ids have a digit or capital letter, site pages are all
+    // lower case. Case-sensitive so the class [0-9A-Z] means what it says.
+    caseSensitive(
+      redirect(13, `^https?://(?:www\\.|m\\.)?imgur\\.com/([a-z]{0,9}[0-9A-Z][A-Za-z0-9]{0,9})(?:/embed)?/?(?:[?#].*)?$`, `${viewer}post/\\1`, PAGE_TYPES),
+    ),
     redirect(14, `^https?://i\\.imgur\\.com/${ID}\\.${VIDEO_EXT}${TAIL}`, `${viewer}media/\\1.\\2`, PAGE_TYPES),
     redirect(15, `${PAGE_HOST}/${ID}\\.${VIDEO_EXT}${TAIL}`, `${viewer}media/\\1.\\2`, PAGE_TYPES),
     // Site pages like imgur.com/upload look like post ids: leave them alone.
@@ -68,7 +74,7 @@ export function buildRules({ viewerUrl, videoInstance }: RuleOptions): Rule[] {
       priority: 2,
       action: { type: 'allow' as Rule['action']['type'] },
       condition: {
-        regexFilter: `${PAGE_HOST}/(?:${RESERVED_PATHS.join('|')})(?:[/?#].*)?$`,
+        regexFilter: `${PAGE_HOST}/(?:${RESERVED_PATHS.join('|')})/?(?:[?#].*)?$`,
         isUrlFilterCaseSensitive: false,
         resourceTypes: PAGE_TYPES as Rule['condition']['resourceTypes'],
       },

@@ -24,9 +24,11 @@ const PAGE_HOSTS = new Set(['imgur.com', 'www.imgur.com', 'm.imgur.com']);
 
 /** First path segments on imgur.com that are site pages, not post ids. */
 export const RESERVED_PATHS = [
-  'about', 'account', 'apps', 'blog', 'download', 'emerald', 'hot', 'jobs',
-  'memegen', 'new', 'privacy', 'random', 'register', 'removalrequest', 'rules',
-  'search', 'signin', 'tos', 'top', 'upload', 'user', 'vidgif',
+  'about', 'account', 'apps', 'blog', 'contact', 'download', 'emerald', 'explore',
+  'favorites', 'gallery', 'help', 'hot', 'jobs', 'logout', 'memegen', 'messages',
+  'new', 'notifications', 'popular', 'privacy', 'random', 'register',
+  'removalrequest', 'rules', 'search', 'settings', 'signin', 'signout', 'topics',
+  'tos', 'top', 'trending', 'upload', 'user', 'vidgif',
 ] as const;
 const RESERVED = new Set<string>(RESERVED_PATHS);
 
