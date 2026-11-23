@@ -1,0 +1,18 @@
+{
+  "title": "rimgo",
+  "clearnet": [
+    { "domain": "ri.bcow.xyz", "url": "https://ri.bcow.xyz", "country": "CA", "provider": "BunnyCDN", "note": "⚠️ Data collected<br>Official instance" },
+    { "domain": "imgur.artemislena.eu", "url": "https://imgur.artemislena.eu", "country": "DE", "provider": "Vodafone Deutschland", "note": "✅ Data not collected<br>Self-hosted, provider is ISP" },
+    { "domain": "rimgo.ducks.party", "url": "https://rimgo.ducks.party/", "country": "NL", "provider": "Netcup", "note": "✅ Data not collected" },
+    { "domain": "rimgo.canine.tools", "url": "https://rimgo.canine.tools", "country": "US", "provider": "OVH", "note": "⚠️ Data collected" },
+    { "domain": "dupe", "url": "https://ri.bcow.xyz/", "country": "CA", "note": "⚠️ Data collected" },
+    { "domain": "plain-http", "url": "http://insecure.example.org", "country": "US", "note": "✅ Data not collected" },
+    { "domain": "script", "url": "javascript:alert(1)", "note": "✅ Data not collected" },
+    { "domain": "no-url", "country": "US", "note": "✅ Data not collected" },
+    { "domain": "bad-country", "url": "https://odd.example.net", "country": "<b>x</b>", "note": 42 },
+    "not an object",
+    null
+  ],
+  "tor": ["http://example.onion"],
+  "i2p": []
+}
