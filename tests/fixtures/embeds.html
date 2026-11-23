@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ImgurPass embed test</title>
+    <style>
+      body { font: 14px/1.4 system-ui, sans-serif; margin: 1rem; }
+      figure { display: inline-block; margin: 0 1rem 1rem 0; vertical-align: top; width: 260px; }
+      img { width: 260px; height: 173px; object-fit: contain; background: #8884; }
+      figcaption { font-size: 12px; word-break: break-all; }
+      .ok { color: #1a7f37; } .bad { color: #cf222e; }
+    </style>
+  </head>
+  <body>
+    <h1>ImgurPass embed test</h1>
+    <p>
+      Each image is <code>OB0y6MR</code>, really 1800×1200. 336×478 means Imgur's region placeholder got
+      through. Direct link test: <a href="https://i.imgur.com/OB0y6MR.jpg">i.imgur.com/OB0y6MR.jpg</a>
+    </p>
+
+    <figure><img src="https://i.imgur.com/OB0y6MR.jpg" /><figcaption>https .jpg</figcaption></figure>
+    <figure><img src="http://i.imgur.com/OB0y6MR.jpg" /><figcaption>http .jpg</figcaption></figure>
+    <figure><img src="https://i.imgur.com/OB0y6MR.png?1" /><figcaption>.png with query</figcaption></figure>
+    <figure><img src="https://i.imgur.com/OB0y6MR" /><figcaption>no extension</figcaption></figure>
+    <figure><img src="https://imgur.com/OB0y6MR.jpg" /><figcaption>imgur.com/&lt;id&gt;.jpg</figcaption></figure>
+    <figure><img src="https://i.imgur.com/OB0y6MRm.jpg" /><figcaption>medium thumbnail (m suffix, smaller is fine)</figcaption></figure>
+    <figure>
+      <picture>
+        <source srcset="https://i.imgur.com/OB0y6MR.webp" type="image/webp" />
+        <img src="https://i.imgur.com/OB0y6MR.jpg" />
+      </picture>
+      <figcaption>&lt;picture&gt; with webp source</figcaption>
+    </figure>
+    <figure><img loading="lazy" src="https://i.imgur.com/OB0y6MR.jpeg" /><figcaption>lazy .jpeg</figcaption></figure>
+
+    <script>
+      for (const img of document.images) {
+        const cap = img.closest('figure').querySelector('figcaption');
+        const label = cap.textContent;
+        const show = () => {
+          const size = `${img.naturalWidth}×${img.naturalHeight}`;
+          const placeholder = img.naturalWidth === 336 && img.naturalHeight === 478;
+          cap.className = placeholder ? 'bad' : 'ok';
+          const via = img.dataset.imgurpass ? `, ${img.dataset.imgurpass}` : '';
+          cap.textContent = `${label}: ${size}${placeholder ? ' (placeholder, still blocked)' : ''}${via}`;
+        };
+        img.addEventListener('load', show);
+        img.addEventListener('error', () => {
+          cap.className = 'bad';
+          cap.textContent = `${label}: failed to load${img.dataset.imgurpass ? `, ${img.dataset.imgurpass}` : ''}`;
+        });
+        if (img.complete && img.naturalWidth) show();
+      }
+    </script>
+  </body>
+</html>
