@@ -1,10 +1,16 @@
 # ImgurPass
 
-Unofficial browser extension that loads Imgur images where Imgur is blocked: the UK, other countries, and school or work networks. It isn't affiliated with Imgur.
+Unofficial browser extension that loads Imgur images, videos and albums where Imgur is blocked: the UK, other countries, and school or work networks. It isn't affiliated with Imgur.
 
-It checks whether Imgur is blocked for you. If it is, Imgur images load through the DuckDuckGo image proxy, and if that fails, through public [rimgo](https://codeberg.org/rimgo/rimgo) instances. If Imgur isn't blocked, it does nothing.
+It checks whether Imgur is blocked for you. If it is:
 
-Status: early development. Images work. Videos and albums aren't supported yet.
+- Images load through the DuckDuckGo image proxy, and if that fails, through public [rimgo](https://codeberg.org/rimgo/rimgo) instances.
+- Videos load through rimgo instances.
+- Album, gallery and post links open in the extension's own viewer, which reads the album from a rimgo instance. If no instance lets it, the link opens on rimgo instead.
+
+If Imgur isn't blocked, it does nothing.
+
+Status: early development.
 
 ## Build
 
