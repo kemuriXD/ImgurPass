@@ -2,7 +2,8 @@ import { storage } from '#imports';
 import { browser, type Browser } from 'wxt/browser';
 import { API_PROBE_URL, detect, isRegionError, PROBE_ID, PROBE_SIZE, PROBE_URL, type Size } from '@/lib/detect';
 import { setRules } from '@/lib/dnr';
-import { duckDuckGoUrl } from '@/lib/imgur-url';
+import { fetchHtml } from '@/lib/fetch-page';
+import { duckDuckGoUrl, normalizeInstance } from '@/lib/imgur-url';
 import {
   checkHealth,
   getInstances,
@@ -34,6 +35,7 @@ const LIST_MAX_AGE = 24 * HOUR;
 const HEALTH_MAX_AGE = 6 * HOUR;
 const HEALTH_RETRY_WHEN_FEW = HOUR / 2;
 const HEALTH_TIMEOUT_MS = 8_000;
+const PAGE_FETCH_TIMEOUT_MS = 8_000;
 const FALLBACK_SCRIPT_ID = 'imgurpass-fallback';
 
 /** The rimgo mirror the image rules point at right now, if any. */
@@ -241,7 +243,27 @@ async function handleMessage(msg: BackgroundMessage, sender: Browser.runtime.Mes
     case 'recheck':
       await runCycle(true);
       return status();
+    case 'fetch-page':
+      return fetchMirrorPage(msg.url, sender);
   }
+}
+
+/** Read a rimgo page for a viewer embedded in another site. Only known mirrors, only for the viewer. */
+async function fetchMirrorPage(url: string, sender: Browser.runtime.MessageSender) {
+  if (!sender.url?.startsWith(browser.runtime.getURL('/viewer.html'))) return null;
+  let origin: string;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') return null;
+    origin = u.origin;
+  } catch {
+    return null;
+  }
+  const known = new Set((await getInstances()).map((i) => i.url));
+  const custom = normalizeInstance((await getSettings()).customInstance);
+  if (custom) known.add(custom);
+  if (!known.has(origin)) return null;
+  return fetchHtml(url, PAGE_FETCH_TIMEOUT_MS);
 }
 
 export default defineBackground(() => {

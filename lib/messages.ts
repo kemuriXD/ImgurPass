@@ -7,6 +7,8 @@ export type BackgroundMessage =
   | { type: 'get-fallbacks'; capability?: Capability }
   | { type: 'instance-result'; instance: string; ok: boolean; capability?: Capability }
   | { type: 'get-status' }
+  /** Embedded viewers read album pages through the background (see fetch-page in background.ts). */
+  | { type: 'fetch-page'; url: string }
   | { type: 'recheck' };
 
 /** Stands for the DuckDuckGo proxy in a fallback list. */

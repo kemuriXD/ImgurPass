@@ -3,6 +3,7 @@
 // pages are read from a rimgo mirror; media load through DuckDuckGo (images)
 // or rimgo (video), trying the next source whenever one fails.
 import { browser } from 'wxt/browser';
+import { fetchHtml, type PageReply } from '@/lib/fetch-page';
 import { duckDuckGoUrl, rimgoMediaUrl } from '@/lib/imgur-url';
 import type { Capability } from '@/lib/instances';
 import { ALL_SITES, type BackgroundMessage, type FallbacksReply } from '@/lib/messages';
@@ -190,20 +191,12 @@ lightbox.addEventListener('close', () => $('lb-media').replaceChildren());
 
 // ---------- album ----------
 
-async function fetchPage(url: string): Promise<{ status: number; text: string } | null> {
-  try {
-    const res = await fetch(url, {
-      // Send the mirror's own cookies: once the browser has passed a mirror's
-      // bot check, that cookie is what lets this request through too.
-      credentials: 'include',
-      referrerPolicy: 'no-referrer',
-      signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
-    });
-    if (!(res.headers.get('content-type') ?? '').includes('text/html')) return null;
-    return { status: res.status, text: await res.text() };
-  } catch {
-    return null;
-  }
+async function fetchPage(url: string): Promise<PageReply | null> {
+  // Inside another site's iframe, Firefox gives this page that site's cookie
+  // jar, so a mirror's bot-check cookie isn't sent. The background page uses
+  // the normal one.
+  if (embed) return ((await send({ type: 'fetch-page', url })) as PageReply | null) ?? null;
+  return fetchHtml(url, PAGE_TIMEOUT_MS);
 }
 
 function renderAlbum(route: ViewerRoute, album: Album, instance: string, images: string[], videos: string[]) {
@@ -318,6 +311,11 @@ function showNeedsAccess(route: ViewerRoute, best: string | null) {
   });
 }
 
+function showNotFound(route: ViewerRoute, instance: string) {
+  setBar(route, `Checked on rimgo mirror ${hostOf(instance)}`, rimgoRouteUrl(instance, route));
+  show(h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")));
+}
+
 async function loadAlbum(route: ViewerRoute, gen: number) {
   const [albums, images, videos] = await Promise.all([fallbacks('album'), fallbacks('image'), fallbacks('video')]);
   if (gen !== generation) return;
@@ -328,6 +326,7 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
   let notFound = 0;
   const attempts: { host: string; result: string }[] = [];
   let challenged: string | undefined;
+  let notFoundAt: string | undefined;
   for (const instance of albums.instances.slice(0, MAX_PAGE_TRIES)) {
     show(h('p', { class: 'muted' }, `Loading from ${hostOf(instance)}…`));
     const page = await fetchPage(rimgoRouteUrl(instance, route));
@@ -349,11 +348,9 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
     if (page.status === 404 && !parsed.ok && parsed.reason === 'not-found') {
       note('says the album was not found');
       report(instance, true, 'album');
+      notFoundAt ??= instance;
       if (++notFound < 2) continue;
-      setBar(route, `Checked on rimgo mirror ${hostOf(instance)}`, rimgoRouteUrl(instance, route));
-      return show(
-        h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")),
-      );
+      return showNotFound(route, instance);
     }
     const why = parsed.ok
       ? `HTTP ${page.status}`
@@ -365,9 +362,17 @@ async function loadAlbum(route: ViewerRoute, gen: number) {
         }[parsed.reason];
     note(page.status === 200 || parsed.ok ? why : `HTTP ${page.status}, ${why}`);
     // A bot check is a mirror that's up and that the browser can get past.
-    if (!parsed.ok && parsed.reason === 'not-rimgo' && [200, 403, 503].includes(page.status)) challenged ??= instance;
+    // It isn't the mirror failing, so don't hold it against it.
+    if (!parsed.ok && parsed.reason === 'not-rimgo' && [200, 403, 503].includes(page.status)) {
+      challenged ??= instance;
+      continue;
+    }
     report(instance, false, 'album');
   }
+
+  // One mirror said "not found" and none of the others could answer at all:
+  // believe it rather than sending the reader to a mirror that can't help.
+  if (notFoundAt) return showNotFound(route, notFoundAt);
 
   // Every mirror we tried is blocked, rate limited or behind a bot check.
   // Opening one as a normal page lets the browser deal with its check; after
@@ -414,7 +419,8 @@ function startCountdown(countdown: HTMLElement, instance: string, url: string) {
     countdown.textContent = `Opening on ${hostOf(instance)} in ${left} s.`;
     if (left-- <= 0) {
       clearInterval(countdownTimer);
-      if (!goToMirror(url)) countdown.textContent = '';
+      // Sent there a moment ago and came back: don't bounce again by ourselves.
+      if (!goToMirror(url)) countdown.textContent = `You were sent to ${hostOf(instance)} for this a moment ago. Use the buttons to try again.`;
     }
   };
   tick();
