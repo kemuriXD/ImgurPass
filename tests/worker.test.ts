@@ -104,17 +104,11 @@ afterEach(() => {
 });
 
 describe('worker: requests', () => {
-  it('rejects methods other than GET, HEAD and OPTIONS', async () => {
-    const res = await call('/AbCdE12.jpg', { method: 'POST', body: 'x' });
+  it.each(['POST', 'OPTIONS'])('rejects %s', async (method) => {
+    const res = await call('/AbCdE12.jpg', { method, ...(method === 'POST' ? { body: 'x' } : {}) });
     expect(res.status).toBe(405);
-    expect(res.headers.get('Allow')).toBe('GET, HEAD, OPTIONS');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('answers CORS preflights', async () => {
-    const res = await call('/AbCdE12.jpg', { method: 'OPTIONS' });
-    expect(res.status).toBe(204);
-    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    expect(res.headers.get('Allow')).toBe('GET, HEAD');
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -145,7 +139,7 @@ describe('worker: requests', () => {
 });
 
 describe('worker: media', () => {
-  it('proxies an image with long caching, CORS and no cookies', async () => {
+  it('proxies an image with long caching, no CORS and no cookies', async () => {
     fetchMock.mockResolvedValue(media(png(1800, 1200, 70000), 'image/png'));
     const res = await call('/AbCdE12.png');
     expect(upstreamUrl()).toBe('https://i.imgur.com/AbCdE12.png');
@@ -153,7 +147,8 @@ describe('worker: media', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('image/png');
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=2592000, immutable');
-    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+    // Other sites can still show it in <img>, but can't read it from scripts.
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull();
     expect(res.headers.get('Set-Cookie')).toBeNull();
     expect((await res.arrayBuffer()).byteLength).toBe(70024);
   });
@@ -218,6 +213,13 @@ describe('worker: media', () => {
     expect((await call('/AbCdE12.mp4')).status).toBe(413);
   });
 
+  it('refuses videos over 50 MB', async () => {
+    fetchMock.mockResolvedValue(media('x', 'video/mp4', 200, { 'Content-Length': String(51 * 1024 * 1024) }));
+    const res = await call('/AbCdE12.mp4');
+    expect(res.status).toBe(413);
+    expect(await res.json()).toEqual({ error: 'too-large' });
+  });
+
   it('refuses video when ALLOW_VIDEO is off', async () => {
     for (const ext of ['mp4', 'webm', 'gifv']) {
       const res = await call(`/AbCdE12.${ext}`, { env: { ALLOW_VIDEO: 'false' } });
@@ -259,7 +261,7 @@ describe('worker: album JSON', () => {
     const res = await call('/api/album/AbCdE');
     expect(upstreamUrl()).toBe('https://api.imgur.com/post/v1/albums/AbCdE?client_id=testclient&include=media');
     expect(res.status).toBe(200);
-    expect(res.headers.get('Cache-Control')).toBe('public, max-age=3600');
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=86400');
     expect(await res.json()).toEqual(expectedAlbum);
   });
 

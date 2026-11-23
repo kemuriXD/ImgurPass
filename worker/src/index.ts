@@ -43,13 +43,15 @@ const DEFAULT_CLIENT_ID = '546c25a59c58ad7';
 
 const MB = 1024 * 1024;
 const IMAGE_CAP = 25 * MB;
-const VIDEO_CAP = 200 * MB;
+// Imgur videos are short; anything bigger isn't worth the free plan's bandwidth.
+const VIDEO_CAP = 50 * MB;
 const JSON_CAP = 2 * MB;
 /** Imgur's placeholders are tiny; only images this small get their size checked. */
 const SNIFF_CAP = 64 * 1024;
 
 const MEDIA_TTL = 'public, max-age=2592000, immutable';
-const POST_TTL = 'public, max-age=3600';
+// Albums rarely change, and every miss spends the shared Imgur API rate limit.
+const POST_TTL = 'public, max-age=86400';
 const NOT_FOUND_TTL = 'public, max-age=300';
 
 const ID = '([A-Za-z0-9]{5,10})';
@@ -65,17 +67,10 @@ const VIDEO_EXTS = ['mp4', 'webm', 'gifv'];
 const REMOVED_SIZE = '161x81';
 const PLACEHOLDER_SIZE = '336x478';
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-  'Access-Control-Allow-Headers': 'Range',
-  'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
-};
-
 function json(status: number, body: unknown, cacheControl = 'no-store'): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': cacheControl },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': cacheControl },
   });
 }
 
@@ -172,7 +167,7 @@ async function handleMedia(request: Request, env: Env, ctx: Ctx, origin: string,
     return json(413, { error: 'too-large' });
   }
 
-  const headers: Record<string, string> = { ...CORS, 'Content-Type': type, 'Cache-Control': MEDIA_TTL };
+  const headers: Record<string, string> = { 'Content-Type': type, 'Cache-Control': MEDIA_TTL };
   if (length !== null) headers['Content-Length'] = length;
   if (video) headers['Accept-Ranges'] = 'bytes';
   const contentRange = upstream.headers.get('Content-Range');
@@ -316,7 +311,6 @@ ${items}</div>
   return new Response(html, {
     status,
     headers: {
-      ...CORS,
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': cacheControl,
       'Content-Security-Policy': "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'",
@@ -370,12 +364,9 @@ async function route(request: Request, env: Env, ctx: Ctx): Promise<Response> {
 
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: { ...CORS, 'Access-Control-Max-Age': '86400' } });
-    }
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       const res = json(405, { error: 'method-not-allowed' });
-      res.headers.set('Allow', 'GET, HEAD, OPTIONS');
+      res.headers.set('Allow', 'GET, HEAD');
       return res;
     }
     const res = await route(request, env, ctx);

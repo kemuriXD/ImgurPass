@@ -43,8 +43,10 @@ Errors are JSON (`{"error": "not-found"}`, `"rate-limited"`, `"upstream"`,
 `"video-disabled"`, `"too-large"`, `"empty"`) except on the pages, which use
 rimgo-style error pages (`404 - rimgo`, `Rate limited by Imgur - rimgo`).
 
-Media is cached for 30 days, posts for an hour, and not-found answers for five
-minutes. Images over 25 MB and videos over 200 MB are refused.
+Media is cached for 30 days, posts for a day, and not-found answers for five
+minutes. Images over 25 MB and videos over 50 MB are refused. There are no CORS
+headers: the extension doesn't need them, and leaving them out keeps other sites
+from reading the server from their scripts.
 
 ## Where it runs
 
