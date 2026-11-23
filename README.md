@@ -17,6 +17,8 @@ ImgurPass checks whether Imgur is blocked for you. If it isn't, ImgurPass stays 
 
 The check runs when the browser starts and every few hours. You can also run it from the toolbar button.
 
+See [COMPARISON.md](COMPARISON.md) for before and after screenshots of each of these, taken from the UK.
+
 The ImgurPass server is a backup run by the author of ImgurPass, because public rimgo mirrors are often down. It answers like a rimgo mirror and is tried before the public ones. You can turn it off in settings; then only DuckDuckGo and the public mirrors are used. Its source is in [`worker/`](worker), and you can deploy your own copy to Cloudflare (see [worker/README.md](worker/README.md)).
 
 ## Install
