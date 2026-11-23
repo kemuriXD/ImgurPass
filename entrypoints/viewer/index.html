@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>ImgurPass viewer</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <nav class="bar" aria-label="Album">
+      <svg class="mark" width="28" height="28" viewBox="0 0 128 128" aria-hidden="true">
+        <rect width="128" height="128" rx="30" fill="#4B5BDC"></rect>
+        <path d="M92 48V34a10 10 0 0 0-10-10H34a10 10 0 0 0-10 10v60a10 10 0 0 0 10 10h48a10 10 0 0 0 10-10V80" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="M34 90l18-22 11 13 7-8" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"></path>
+        <path d="M80 64h32M101 52l12 12-12 12" fill="none" stroke="#FFC857" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+      <span id="source" class="source">ImgurPass</span>
+      <button type="button" id="copy-page" class="btn" hidden>Copy Imgur link</button>
+      <a id="open-rimgo" class="btn" target="_blank" rel="noreferrer" hidden>Open on rimgo</a>
+    </nav>
+
+    <main id="main" class="main" aria-live="polite">
+      <p class="muted" id="loading">Loading…</p>
+    </main>
+
+    <dialog id="lightbox" class="lightbox" aria-label="Image viewer">
+      <div class="lb-top">
+        <span id="lb-count" class="lb-count"></span>
+        <button type="button" id="lb-copy" class="btn btn-dark">Copy direct link</button>
+        <a id="lb-full" class="btn btn-dark" target="_blank" rel="noreferrer">Open full size</a>
+        <button type="button" id="lb-close" class="icon-btn" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+        </button>
+      </div>
+      <div class="lb-stage">
+        <button type="button" id="lb-prev" class="round-btn" aria-label="Previous">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </button>
+        <div id="lb-media" class="lb-media"></div>
+        <button type="button" id="lb-next" class="round-btn" aria-label="Next">
+          <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </button>
+      </div>
+      <p id="lb-caption" class="lb-caption"></p>
+    </dialog>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

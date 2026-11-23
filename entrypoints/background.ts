@@ -1,6 +1,6 @@
 import { browser, type Browser } from 'wxt/browser';
 import { API_PROBE_URL, detect, isRegionError, PROBE_ID, PROBE_SIZE, PROBE_URL, type Size } from '@/lib/detect';
-import { setImageRules } from '@/lib/dnr';
+import { setRules } from '@/lib/dnr';
 import { duckDuckGoUrl } from '@/lib/imgur-url';
 import {
   checkHealth,
@@ -87,8 +87,12 @@ let applying: Promise<void> = Promise.resolve();
 function applyState(): Promise<void> {
   applying = applying
     .then(async () => {
-      const active = await currentlyActive();
-      await setImageRules(active);
+      const settings = await getSettings();
+      const active = isActive(settings, await detectionItem.getValue());
+      const [videoInstance] = await getOrderedInstances(settings, 'video');
+      await setRules(
+        active ? { viewerUrl: browser.runtime.getURL('/viewer.html'), videoInstance: videoInstance ?? null } : null,
+      );
       await syncFallbackScript(active);
     })
     .catch((err) => console.error('ImgurPass: failed to apply state', err));
@@ -134,6 +138,8 @@ function runHealthCheck() {
   healthRun ??= (async () => {
     const settings = await getSettings();
     await withHealthProbe((probe) => checkHealth(probe, settings.customInstance));
+    // The embedded-video rule points at a specific mirror: pick from fresh results.
+    await applyState();
   })()
     .catch((err) => console.error('ImgurPass: health check failed', err))
     .finally(() => (healthRun = null));
@@ -176,11 +182,16 @@ async function handleMessage(msg: BackgroundMessage): Promise<unknown> {
   switch (msg.type) {
     case 'get-fallbacks': {
       const settings = await getSettings();
-      const active = isActive(settings, await detectionItem.getValue());
-      return { active, instances: active ? await getOrderedInstances(settings) : [] } satisfies FallbacksReply;
+      return {
+        active: isActive(settings, await detectionItem.getValue()),
+        instances: await getOrderedInstances(settings, msg.capability ?? 'image'),
+        allSites: await hasAllSites(),
+      } satisfies FallbacksReply;
     }
     case 'instance-result':
-      await reportInstanceResult(msg.instance, msg.ok);
+      await reportInstanceResult(msg.instance, msg.ok, msg.capability ?? 'image');
+      // A dead video mirror shouldn't stay in the embedded-video rule.
+      if (msg.capability === 'video' && !msg.ok) void applyState();
       return null;
     case 'get-status':
       return status();

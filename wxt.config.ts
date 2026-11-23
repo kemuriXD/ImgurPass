@@ -5,7 +5,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'ImgurPass (unofficial)',
     description:
-      'View Imgur images where Imgur is blocked, through DuckDuckGo and rimgo. Not affiliated with Imgur.',
+      'View Imgur images, videos and albums where Imgur is blocked, through DuckDuckGo and rimgo. Not affiliated with Imgur.',
     permissions: [
       'declarativeNetRequest',
       'storage',
@@ -20,6 +20,9 @@ export default defineConfig({
       'https://rimgo.codeberg.page/*',
     ],
     optional_host_permissions: ['*://*/*'],
+    // Album, post and video links are redirected to the viewer, and Imgur's
+    // album embeds load it in an iframe, so any page may open it.
+    web_accessible_resources: [{ resources: ['viewer.html'], matches: ['*://*/*'] }],
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {
