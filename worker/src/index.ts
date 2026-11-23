@@ -76,6 +76,15 @@ function json(status: number, body: unknown, cacheControl = 'no-store'): Respons
 
 const notFound = () => json(404, { error: 'not-found' }, NOT_FOUND_TTL);
 
+/**
+ * Bump when cached answers change shape (headers, layout). workers.dev caches
+ * can't be purged, so a new version is the only way to drop old copies.
+ */
+const CACHE_VERSION = 2;
+
+/** The cache entry for a path. Never served directly, so the query string is free to use. */
+const cacheKey = (origin: string, path: string) => new Request(`${origin}${path}?cache=${CACHE_VERSION}`);
+
 function defaultCache(): Cache {
   return (globalThis as unknown as { caches: { default: Cache } }).caches.default;
 }
@@ -129,7 +138,7 @@ async function handleMedia(request: Request, env: Env, ctx: Ctx, origin: string,
   if (video && env.ALLOW_VIDEO !== 'true') return json(403, { error: 'video-disabled' });
   if (ext === 'gifv') ext = 'mp4';
   const file = `${id}.${ext}`;
-  const key = new Request(`${origin}/${file}`);
+  const key = cacheKey(origin, `/${file}`);
   const range = video ? request.headers.get('Range') : null;
 
   if (!range) {
@@ -277,7 +286,7 @@ async function cached(key: Request, ctx: Ctx, make: () => Promise<Response>): Pr
 }
 
 function handleApi(env: Env, ctx: Ctx, origin: string, kind: string, id: string): Promise<Response> {
-  return cached(new Request(`${origin}/api/${kind}/${id}`), ctx, async () => {
+  return cached(cacheKey(origin, `/api/${kind}/${id}`), ctx, async () => {
     const album = await fetchAlbum(env, kind === 'album' ? 'albums' : 'posts', id);
     if (album === 'not-found') return notFound();
     if (typeof album === 'string') return json(album === 'rate-limited' ? 429 : 502, { error: album });
@@ -341,7 +350,7 @@ export function renderAlbum(album: Album): string {
 }
 
 function handlePage(env: Env, ctx: Ctx, origin: string, endpoint: Endpoint, path: string, id: string): Promise<Response> {
-  return cached(new Request(`${origin}${path}`), ctx, async () => {
+  return cached(cacheKey(origin, path), ctx, async () => {
     const album = await fetchAlbum(env, endpoint, id);
     if (album === 'not-found') return page(404, '404', 'Not found', '', NOT_FOUND_TTL);
     if (album === 'rate-limited') return page(429, 'Rate limited by Imgur', 'Rate limited by Imgur', '', 'no-store');

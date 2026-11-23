@@ -157,7 +157,7 @@ describe('worker: media', () => {
     fetchMock.mockImplementation(async () => media(png(1800, 1200), 'image/png'));
     await call('/AbCdE12.png?x=1');
     await Promise.all(waits);
-    expect([...cache.store.keys()]).toEqual([`${ORIGIN}/AbCdE12.png`]);
+    expect([...cache.store.keys()]).toEqual([`${ORIGIN}/AbCdE12.png?cache=2`]);
     const res = await call('/AbCdE12.png?y=2');
     expect(res.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
