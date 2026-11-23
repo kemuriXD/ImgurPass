@@ -5,22 +5,30 @@ servers, where Imgur isn't blocked. It answers like a rimgo mirror, so the
 extension can use it as a custom rimgo instance.
 
 It only ever fetches `i.imgur.com` and `api.imgur.com`, only for the paths
-below, and only for GET, HEAD and OPTIONS.
+below, and only answers GET and HEAD.
 
 ## Deploy
 
 ```sh
 cd worker
 npm install
-npx wrangler secret put IMGUR_CLIENT_ID   # your Imgur API client id
 npx wrangler deploy
 ```
 
-Without the secret it falls back to rimgo's public client id, which is shared
-and often rate limited.
+Album, gallery and post pages need an Imgur API client id. Imgur no longer takes
+new app registrations, so by default the Worker uses rimgo's public client id.
+That id is shared by many rimgo mirrors and often rate limited, which is why
+pages are cached for a day. If you already have a client id of your own, set it
+as a secret before deploying:
 
-Then add the Worker's URL (e.g. `https://imgurpass.<you>.workers.dev`) as a
-custom rimgo instance in the extension's options.
+```sh
+npx wrangler secret put IMGUR_CLIENT_ID
+```
+
+Images and videos come straight from `i.imgur.com` and don't use the API.
+
+To use your own deployment, add its URL (e.g. `https://imgurpass.<you>.workers.dev`)
+under "Your own rimgo mirror" in the extension's settings, and press Test.
 
 ## Video
 

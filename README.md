@@ -17,7 +17,7 @@ ImgurPass checks whether Imgur is blocked for you. If it isn't, ImgurPass stays 
 
 The check runs when the browser starts and every few hours. You can also run it from the toolbar button.
 
-The ImgurPass server is a backup run by the author of ImgurPass, because public rimgo mirrors are often down. It answers like a rimgo mirror and is tried before the public ones. You can turn it off in settings; then only DuckDuckGo and the public mirrors are used.
+The ImgurPass server is a backup run by the author of ImgurPass, because public rimgo mirrors are often down. It answers like a rimgo mirror and is tried before the public ones. You can turn it off in settings; then only DuckDuckGo and the public mirrors are used. Its source is in [`worker/`](worker), and you can deploy your own copy to Cloudflare (see [worker/README.md](worker/README.md)).
 
 ## Install
 
@@ -76,8 +76,9 @@ DuckDuckGo and each rimgo mirror have their own privacy policies. The ImgurPass 
 
 ## Known limits
 
-- Public rimgo mirrors come and go. Many sit behind bot checks or are rate-limited by Imgur, so some days only one or two work. ImgurPass checks them regularly and tries the working ones first. If you can, run your own mirror and add it in settings.
-- A mirror's bot check has to be passed in a normal tab before the viewer can read albums from it. If an album opens on rimgo instead of the viewer, that's usually why. After you've passed the check once, it opens in the viewer again.
+- Public rimgo mirrors come and go. Many sit behind bot checks or are rate-limited by Imgur, so some days only one or two work. ImgurPass checks them regularly and tries the working ones first. The ImgurPass server covers for them, and you can also add your own mirror in settings.
+- With the ImgurPass server turned off (or down), a public mirror's bot check has to be passed in a normal tab before the viewer can read albums from it. If an album opens on rimgo instead of the viewer, that's usually why. After you've passed the check once, it opens in the viewer again.
+- Album, gallery and post pages on the ImgurPass server use a shared Imgur API key, so Imgur sometimes rate-limits them. The viewer then falls back to the public mirrors.
 - DuckDuckGo only proxies images, so videos and albums depend on the ImgurPass server and rimgo.
 
 ## Development
@@ -91,7 +92,7 @@ pnpm dev:firefox     # Firefox dev build
 pnpm build           # Chrome  -> .output/chrome-mv3
 pnpm build:firefox   # Firefox -> .output/firefox-mv3
 pnpm typecheck
-pnpm test            # unit tests (Vitest)
+pnpm test            # unit tests (Vitest), including the server in worker/
 pnpm test:e2e        # builds, then loads the extension in Chromium (Playwright)
 ```
 
