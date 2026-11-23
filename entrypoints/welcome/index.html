@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Welcome to ImgurPass</title>
+  </head>
+  <body>
+    <main class="page welcome">
+      <header class="hero">
+        <img class="logo" src="/logo.svg" width="64" height="64" alt="" />
+        <h1>ImgurPass is installed</h1>
+        <p class="lead">
+          It checks whether Imgur is blocked for you. If it is, Imgur images load through a proxy. If it isn't,
+          ImgurPass stays idle and sends nothing anywhere. Unofficial, not affiliated with Imgur.
+        </p>
+      </header>
+
+      <div id="access-warning" class="callout alert" data-tone="error" role="alert" hidden>
+        <div class="callout-text">
+          <div class="callout-title">ImgurPass can't reach Imgur or the proxies yet</div>
+          <div class="callout-body">
+            Your browser hasn't given ImgurPass access to the few sites it needs to check for a block and load images.
+          </div>
+        </div>
+        <button id="allow-required" class="btn btn-danger" type="button">Allow these sites</button>
+      </div>
+
+      <section class="card" aria-labelledby="flow-h">
+        <h2 id="flow-h" class="card-title">What leaves your browser</h2>
+        <ol class="flow">
+          <li class="flow-step">
+            <div class="flow-title">Your browser</div>
+            <div class="small muted">Sees an Imgur image address on a page</div>
+          </li>
+          <li class="flow-step flow-proxy">
+            <div class="flow-title">DuckDuckGo or a rimgo mirror</div>
+            <div class="small">Receives only that image address</div>
+          </li>
+          <li class="flow-step">
+            <div class="flow-title">Imgur</div>
+            <div class="small muted">Sends the image to the proxy, which passes it back to you</div>
+          </li>
+        </ol>
+        <div class="lists">
+          <div class="group">
+            <h3 class="list-title">Sent, only while Imgur is blocked</h3>
+            <ul class="muted">
+              <li>The address of each Imgur image, video or album you open</li>
+              <li>Your IP address, as with any website the proxy serves</li>
+            </ul>
+          </div>
+          <div class="group">
+            <h3 class="list-title">Never sent</h3>
+            <ul class="muted">
+              <li>The pages you visit or anything on them</li>
+              <li>Analytics, crash reports or an account: there are none</li>
+            </ul>
+          </div>
+        </div>
+        <p class="small muted">
+          DuckDuckGo and each rimgo mirror have their own privacy policies. You can limit ImgurPass to mirrors that say
+          they don't collect data in Settings.
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="choice-h">
+        <h2 id="choice-h" class="card-title">Fix Imgur images on other sites too?</h2>
+        <p class="muted">
+          Forums, blogs and chat apps embed Imgur images. To fix those, your browser needs to let ImgurPass act on every
+          site. It will warn that ImgurPass can "read and change your data on all websites". ImgurPass only looks for
+          Imgur image addresses and changes nothing else.
+        </p>
+        <div id="choice" class="field-row">
+          <button id="grant-all" class="btn btn-primary btn-lg" type="button">Fix embeds everywhere</button>
+          <button id="skip" class="btn btn-lg" type="button">Only direct links for now</button>
+        </div>
+        <p id="choice-result" class="choice-result" role="status" tabindex="-1" hidden></p>
+        <p class="small muted">You can change this later in Settings or from the toolbar button.</p>
+      </section>
+
+      <section id="first-check" class="callout check" aria-live="polite">
+        <div id="check-callout" class="check-text"></div>
+        <button id="open-settings" class="link-btn" type="button">Open settings</button>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

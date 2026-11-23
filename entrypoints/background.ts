@@ -247,7 +247,8 @@ async function handleMessage(msg: BackgroundMessage, sender: Browser.runtime.Mes
 export default defineBackground(() => {
   // Firefox doesn't keep alarms across restarts or re-enabling, so check on every wake.
   void ensureAlarms();
-  browser.runtime.onInstalled.addListener(() => {
+  browser.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === 'install') void browser.tabs.create({ url: browser.runtime.getURL('/welcome.html') });
     void ensureAlarms().then(() => runCycle());
   });
   browser.runtime.onStartup.addListener(() => {
