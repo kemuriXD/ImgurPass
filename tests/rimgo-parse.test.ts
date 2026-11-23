@@ -19,6 +19,11 @@ describe('parseRimgoPost', () => {
     });
   });
 
+  it('does not mistake a post titled like an error for an error page', () => {
+    const html = album.replace('Retro PC build -', '404 memes -').replace('>Retro PC build<', '>404 memes<');
+    expect(parseRimgoPost(html).ok).toBe(true);
+  });
+
   it('keeps description text only, never markup', () => {
     const html = album.replace('Needs cleaning.', '<img src=x onerror="alert(1)"><script>alert(2)</script>');
     const result = parseRimgoPost(html);

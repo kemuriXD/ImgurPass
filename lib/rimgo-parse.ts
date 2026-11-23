@@ -42,7 +42,8 @@ export function parseRimgoPost(html: string): ParseResult {
 
   if (!/\brimgo$/i.test(pageTitle)) return { ok: false, reason: 'not-rimgo' };
   if (/rate limited/i.test(pageTitle)) return { ok: false, reason: 'rate-limited' };
-  if (/not found|^error\b|^\d{3}\b/i.test(pageTitle)) return { ok: false, reason: 'not-found' };
+  // rimgo's own error pages, not a post that happens to be titled "404 memes".
+  if (/^(?:\d{3}|error|not found)\s*-\s*rimgo$/i.test(pageTitle)) return { ok: false, reason: 'not-found' };
 
   const container = doc.querySelector('main .break-words') ?? doc.querySelector('main');
   if (!container) return { ok: false, reason: 'not-rimgo' };
