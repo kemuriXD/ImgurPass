@@ -1,5 +1,4 @@
 import { browser, type Browser } from 'wxt/browser';
-import { RESERVED_PATHS } from './imgur-url';
 
 type Rule = Browser.declarativeNetRequest.Rule;
 type ResourceType = `${Browser.declarativeNetRequest.ResourceType}`;
@@ -61,24 +60,14 @@ export function buildRules({ viewerUrl, videoInstance }: RuleOptions): Rule[] {
     redirect(10, `${PAGE_HOST}/a/${ID}(?:/embed)?/?(?:[?#].*)?$`, `${viewer}a/\\1`, PAGE_TYPES),
     redirect(11, `${PAGE_HOST}/gallery/(?:[^/?#]*-)?${ID}(?:/embed)?/?(?:[?#].*)?$`, `${viewer}gallery/\\1`, PAGE_TYPES),
     redirect(12, `${PAGE_HOST}/(?:t|r)/[^/?#]+/${ID}/?(?:[?#].*)?$`, `${viewer}post/\\1`, PAGE_TYPES),
-    // imgur.com/<id>: ids have a digit or capital letter, site pages are all
-    // lower case. Case-sensitive so the class [0-9A-Z] means what it says.
+    // imgur.com/<id>: ids have a digit or capital letter, while site pages
+    // (imgur.com/upload, /settings, ...) are all lower case, so they never
+    // match. Case-sensitive so the class [0-9A-Z] means what it says.
     caseSensitive(
       redirect(13, `^https?://(?:www\\.|m\\.)?imgur\\.com/([a-z]{0,9}[0-9A-Z][A-Za-z0-9]{0,9})(?:/embed)?/?(?:[?#].*)?$`, `${viewer}post/\\1`, PAGE_TYPES),
     ),
     redirect(14, `^https?://i\\.imgur\\.com/${ID}\\.${VIDEO_EXT}${TAIL}`, `${viewer}media/\\1.\\2`, PAGE_TYPES),
     redirect(15, `${PAGE_HOST}/${ID}\\.${VIDEO_EXT}${TAIL}`, `${viewer}media/\\1.\\2`, PAGE_TYPES),
-    // Site pages like imgur.com/upload look like post ids: leave them alone.
-    {
-      id: 16,
-      priority: 2,
-      action: { type: 'allow' as Rule['action']['type'] },
-      condition: {
-        regexFilter: `${PAGE_HOST}/(?:${RESERVED_PATHS.join('|')})/?(?:[?#].*)?$`,
-        isUrlFilterCaseSensitive: false,
-        resourceTypes: PAGE_TYPES as Rule['condition']['resourceTypes'],
-      },
-    },
   ];
 
   if (videoInstance) {
@@ -88,10 +77,31 @@ export function buildRules({ viewerUrl, videoInstance }: RuleOptions): Rule[] {
   return rules;
 }
 
+/**
+ * Rules the browser can compile. One rejected rule makes updateDynamicRules
+ * throw and installs nothing at all, so drop (and log) bad ones up front.
+ */
+async function supportedRules(rules: Rule[]): Promise<Rule[]> {
+  const check = browser.declarativeNetRequest.isRegexSupported;
+  if (!check) return rules;
+  const results = await Promise.all(
+    rules.map((rule) =>
+      check({ regex: rule.condition.regexFilter!, isCaseSensitive: rule.condition.isUrlFilterCaseSensitive ?? false }).catch(
+        () => ({ isSupported: true }),
+      ),
+    ),
+  );
+  return rules.filter((rule, i) => {
+    const r = results[i] as { isSupported: boolean; reason?: string };
+    if (!r.isSupported) console.error(`ImgurPass: rule ${rule.id} skipped (${r.reason ?? 'unsupported regex'})`);
+    return r.isSupported;
+  });
+}
+
 /** Install or remove the redirect rules. Idempotent. */
 export async function setRules(options: RuleOptions | null): Promise<void> {
   await browser.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: [...RULE_IDS],
-    addRules: options ? buildRules(options) : [],
+    addRules: options ? await supportedRules(buildRules(options)) : [],
   });
 }

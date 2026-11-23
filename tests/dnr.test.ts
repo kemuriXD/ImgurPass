@@ -23,6 +23,15 @@ function apply(url: string, type: string, options = OPTIONS): string | null {
 }
 
 describe('buildRules', () => {
+  it('keeps every regex small', () => {
+    // Chrome rejects a regex that compiles to more than 2 KB, and one rejected
+    // rule makes the whole update fail. A long alternation of words did that.
+    for (const rule of buildRules(OPTIONS)) {
+      expect(rule.condition.regexFilter!.length, `rule ${rule.id}`).toBeLessThan(160);
+      expect(rule.condition.regexFilter!.split('|').length, `rule ${rule.id}`).toBeLessThan(12);
+    }
+  });
+
   it('uses only ids it owns, each once', () => {
     const ids = buildRules(OPTIONS).map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
