@@ -17,6 +17,8 @@ import {
   parseInstanceList,
   SOFT_FAILURE_LIMIT,
   CAPABILITY_RETRY_MS,
+  CAPABILITY_FAILURE_LIMIT,
+  LAST_RESORT_COUNT,
   withCapabilityResult,
   withCheckResult,
   withReportedFailure,
@@ -59,29 +61,39 @@ describe('orderInstances', () => {
   };
   const noShuffle = () => 0.999;
 
-  it('puts healthy no-data first, skips dead ones, then untested', () => {
+  it('puts healthy no-data first, then untested, then down ones as a last resort', () => {
     expect(orderInstances(list, health, { onlyNoData: false, random: noShuffle })).toEqual([
       'https://c.example',
       'https://b.example',
       'https://e.example',
       'https://d.example',
+      'https://a.example',
     ]);
+  });
+
+  it('never returns an empty list while instances exist', () => {
+    const allDown: HealthMap = Object.fromEntries(list.map((i, n) => [i.url, { ok: false, checkedAt: 10 - n, failures: 3 }]));
+    // Longest-ago failures first, at most LAST_RESORT_COUNT of them.
+    expect(orderInstances(list, allDown, { onlyNoData: false, random: noShuffle })).toEqual(
+      ['https://e.example', 'https://d.example', 'https://c.example'].slice(0, LAST_RESORT_COUNT),
+    );
   });
 
   it('can restrict to no-data instances', () => {
     expect(orderInstances(list, health, { onlyNoData: true, random: noShuffle })).toEqual([
       'https://c.example',
       'https://e.example',
+      'https://a.example',
     ]);
   });
 
   it('puts the custom instance last, even when listed', () => {
     expect(
       orderInstances(list, health, { onlyNoData: true, customInstance: 'c.example/', random: noShuffle }),
-    ).toEqual(['https://e.example', 'https://c.example']);
+    ).toEqual(['https://e.example', 'https://a.example', 'https://c.example']);
     expect(
       orderInstances(list, health, { onlyNoData: true, customInstance: 'my.rimgo.example', random: noShuffle }),
-    ).toEqual(['https://c.example', 'https://e.example', 'https://my.rimgo.example']);
+    ).toEqual(['https://c.example', 'https://e.example', 'https://a.example', 'https://my.rimgo.example']);
   });
 
   it('orders by video or album capability, retrying old failures', () => {
@@ -96,16 +108,27 @@ describe('orderInstances', () => {
       'https://a.example',
       'https://c.example',
       'https://e.example',
+      'https://d.example',
+      'https://b.example',
     ]);
     // Images ignore video results.
-    expect(orderInstances(list, capHealth, { onlyNoData: false, now, random: noShuffle })).toContain('https://b.example');
+    expect(orderInstances(list, capHealth, { onlyNoData: false, now, random: noShuffle }).slice(0, 3)).toContain('https://b.example');
+  });
+
+  it('benches an album or video mirror only after failures in a row', () => {
+    let h = withCapabilityResult({}, 'https://a.example', 'album', false, 1);
+    expect(h['https://a.example']?.album).toEqual({ ok: true, at: 1, failures: 1 });
+    h = withCapabilityResult(h, 'https://a.example', 'album', false, 2);
+    expect(h['https://a.example']?.album).toEqual({ ok: false, at: 2, failures: CAPABILITY_FAILURE_LIMIT });
+    h = withCapabilityResult(h, 'https://a.example', 'album', true, 3);
+    expect(h['https://a.example']?.album).toEqual({ ok: true, at: 3, failures: 0 });
   });
 
   it('keeps capability results when image health changes', () => {
     let h = withCapabilityResult({}, 'https://a.example', 'album', true, 5);
     h = withReportedFailure(h, 'https://a.example', 6);
     h = withCheckResult(h, 'https://a.example', true, 7);
-    expect(h['https://a.example']).toEqual({ ok: true, checkedAt: 7, failures: 0, album: { ok: true, at: 5 } });
+    expect(h['https://a.example']).toEqual({ ok: true, checkedAt: 7, failures: 0, album: { ok: true, at: 5, failures: 0 } });
   });
 
   it('shuffles within a group to spread load', () => {
@@ -162,10 +185,11 @@ describe('instance manager', () => {
     expect(health['https://rimgo.canine.tools']?.ok).toBe(false);
     expect(health['https://my.rimgo.example']?.ok).toBe(true);
 
-    expect(await getOrderedInstances({ ...DEFAULT_SETTINGS, customInstance: 'my.rimgo.example' })).toEqual([
-      'https://ri.bcow.xyz',
-      'https://my.rimgo.example',
-    ]);
+    const ordered = await getOrderedInstances({ ...DEFAULT_SETTINGS, customInstance: 'my.rimgo.example' });
+    // Working mirror first, custom last, a few down ones in between as a last resort.
+    expect(ordered[0]).toBe('https://ri.bcow.xyz');
+    expect(ordered.at(-1)).toBe('https://my.rimgo.example');
+    expect(ordered).toHaveLength(2 + LAST_RESORT_COUNT);
   });
 
   it('needs several page failures before an instance is down, and one success to recover', async () => {

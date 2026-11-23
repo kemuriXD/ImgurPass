@@ -16,7 +16,14 @@ export type Capability = 'image' | 'video' | 'album';
 export interface CapabilityHealth {
   ok: boolean;
   at: number;
+  /** Consecutive failures since the last success. */
+  failures?: number;
 }
+
+/** Album or video failures in a row before a mirror is benched for that use. */
+export const CAPABILITY_FAILURE_LIMIT = 2;
+/** Down mirrors still tried after everything else, so the list is never empty. */
+export const LAST_RESORT_COUNT = 3;
 
 export interface Health {
   /** Image health. */
@@ -28,8 +35,8 @@ export interface Health {
   album?: CapabilityHealth;
 }
 
-/** A failed video or album capability is retried after this long. */
-export const CAPABILITY_RETRY_MS = 6 * 60 * 60 * 1000;
+/** A benched video or album mirror is tried normally again after this long. */
+export const CAPABILITY_RETRY_MS = 30 * 60 * 1000;
 
 export type HealthMap = Record<string, Health>;
 
@@ -81,34 +88,45 @@ export interface OrderOptions {
   random?: () => number;
 }
 
-/** 0 = known good, 1 = untested (or failed long ago), null = skip. */
-function rank(h: Health | undefined, capability: Capability, now: number): 0 | 1 | null {
+/**
+ * 0 = known good, 1 = untested (or benched long ago), 2 = down. Down ones carry
+ * when they last failed, so the longest-ago (likeliest recovered) go first.
+ */
+function rank(h: Health | undefined, capability: Capability, now: number): { r: 0 | 1 | 2; failedAt: number } {
   const imageTested = !!h && (h.checkedAt > 0 || h.failures > 0);
-  if (imageTested && !h.ok) return null;
-  if (capability === 'image') return imageTested ? 0 : 1;
+  if (imageTested && !h.ok) return { r: 2, failedAt: h.checkedAt };
+  if (capability === 'image') return { r: imageTested ? 0 : 1, failedAt: 0 };
   const cap = h?.[capability];
-  if (!cap) return 1;
-  if (cap.ok) return 0;
-  return now - cap.at > CAPABILITY_RETRY_MS ? 1 : null;
+  if (!cap) return { r: 1, failedAt: 0 };
+  if (cap.ok) return { r: 0, failedAt: 0 };
+  return now - cap.at > CAPABILITY_RETRY_MS ? { r: 1, failedAt: 0 } : { r: 2, failedAt: cap.at };
 }
 
 /**
  * Instances to try, best first. Known good before untested; within each, "data
- * not collected" first; each group shuffled to spread load. Down instances are
- * skipped. The user's custom instance always comes last.
+ * not collected" first; each group shuffled to spread load. Then, as a last
+ * resort, a few down instances (they may have recovered since), so the list is
+ * never empty while any instance exists. The user's custom instance comes last.
  */
 export function orderInstances(list: readonly Instance[], health: HealthMap, opts: OrderOptions): string[] {
   const random = opts.random ?? Math.random;
   const capability = opts.capability ?? 'image';
   const now = opts.now ?? Date.now();
   const groups: Instance[][] = [[], [], [], []];
+  const down: { url: string; failedAt: number }[] = [];
   for (const inst of list) {
     if (opts.onlyNoData && !inst.noData) continue;
-    const r = rank(health[inst.url], capability, now);
-    if (r === null) continue;
-    groups[r * 2 + (inst.noData ? 0 : 1)]!.push(inst);
+    const { r, failedAt } = rank(health[inst.url], capability, now);
+    if (r === 2) down.push({ url: inst.url, failedAt });
+    else groups[r * 2 + (inst.noData ? 0 : 1)]!.push(inst);
   }
-  const ordered = groups.flatMap((g) => shuffle(g, random).map((i) => i.url));
+  const ordered = [
+    ...groups.flatMap((g) => shuffle(g, random).map((i) => i.url)),
+    ...down
+      .sort((a, b) => a.failedAt - b.failedAt)
+      .slice(0, LAST_RESORT_COUNT)
+      .map((d) => d.url),
+  ];
 
   const custom = opts.customInstance ? normalizeInstance(opts.customInstance) : null;
   if (custom) return [...ordered.filter((u) => u !== custom), custom];
@@ -143,5 +161,9 @@ export function withCapabilityResult(
   ok: boolean,
   now: number,
 ): HealthMap {
-  return { ...health, [url]: { ...base(health[url]), [capability]: { ok, at: now } } };
+  const prev = base(health[url]);
+  const failures = ok ? 0 : (prev[capability]?.failures ?? 0) + 1;
+  // One failure can be a rate limit or a timeout: bench only after several in a row.
+  const result = { ok: ok || failures < CAPABILITY_FAILURE_LIMIT, at: now, failures };
+  return { ...health, [url]: { ...prev, [capability]: result } };
 }

@@ -29,6 +29,7 @@ const DETECT_EVERY_MIN = 4 * 60;
 const RETRY_UNKNOWN_MIN = 15;
 const LIST_MAX_AGE = 24 * HOUR;
 const HEALTH_MAX_AGE = 6 * HOUR;
+const HEALTH_RETRY_WHEN_FEW = HOUR / 2;
 const HEALTH_TIMEOUT_MS = 8_000;
 const FALLBACK_SCRIPT_ID = 'imgurpass-fallback';
 
@@ -146,8 +147,12 @@ function runHealthCheck() {
   return healthRun;
 }
 
+/** Re-check every few hours, or much sooner when hardly any mirror works. */
 async function healthIsStale() {
-  return Date.now() - (await lastHealthCheckItem.getValue()) > HEALTH_MAX_AGE;
+  const health = await healthItem.getValue();
+  const working = Object.values(health).filter((h) => h.ok && h.checkedAt > 0).length;
+  const maxAge = working < 2 ? HEALTH_RETRY_WHEN_FEW : HEALTH_MAX_AGE;
+  return Date.now() - (await lastHealthCheckItem.getValue()) > maxAge;
 }
 
 /** Full cycle: refresh the list if old, detect, apply, and health-check while active. */
@@ -162,6 +167,10 @@ async function runCycle(force = false) {
 async function ensureAlarms() {
   if (!(await browser.alarms.get('detect'))) {
     browser.alarms.create('detect', { periodInMinutes: DETECT_EVERY_MIN });
+  }
+  // Cheap: only runs a check when healthIsStale() says so.
+  if (!(await browser.alarms.get('health'))) {
+    browser.alarms.create('health', { periodInMinutes: 30 });
   }
 }
 
@@ -213,6 +222,11 @@ export default defineBackground(() => {
 
   browser.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'detect' || alarm.name === 'detect-retry') void runCycle();
+    if (alarm.name === 'health') {
+      void (async () => {
+        if ((await currentlyActive()) && (await healthIsStale())) await runHealthCheck();
+      })();
+    }
   });
 
   browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
