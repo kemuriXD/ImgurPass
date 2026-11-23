@@ -202,7 +202,7 @@ async function fetchPage(url: string): Promise<PageReply | null> {
 
 function renderAlbum(route: ViewerRoute, album: Album, instance: string, images: string[], videos: string[]) {
   const rimgoUrl = rimgoRouteUrl(instance, route);
-  setBar(route, `Loaded through rimgo mirror ${hostOf(instance)}`, rimgoUrl);
+  setBar(route, `Loaded through ${sourceName(instance)}`, rimgoUrl);
   const fallbackTitle = route.kind === 'post' ? 'Imgur post' : 'Imgur album';
   document.title = `${album.title || fallbackTitle} · ImgurPass`;
 
@@ -313,8 +313,13 @@ function showNeedsAccess(route: ViewerRoute, best: string | null) {
 }
 
 function showNotFound(route: ViewerRoute, instance: string) {
-  setBar(route, `Checked on rimgo mirror ${hostOf(instance)}`, rimgoRouteUrl(instance, route));
+  setBar(route, `Checked on ${sourceName(instance)}`, rimgoRouteUrl(instance, route));
   show(h('section', { class: 'notice' }, h('h2', {}, 'Not found'), h('p', {}, "This album or post doesn't exist any more, or it was never public.")));
+}
+
+/** "the ImgurPass server" or "rimgo mirror <host>", for the bar above the album. */
+function sourceName(instance: string): string {
+  return instance === IMGURPASS_SERVER ? 'the ImgurPass server' : `rimgo mirror ${hostOf(instance)}`;
 }
 
 /** Mirrors whose pages the viewer may read. Without all-sites access, only the ImgurPass server's. */
@@ -459,7 +464,7 @@ async function loadVideo(route: Extract<ViewerRoute, { kind: 'media' }>, gen: nu
   loadWithFallback(video, videoSources(route.id, videos.instances), 'video', () => video.replaceWith(failedBox('video', rimgoUrl)));
   video.addEventListener('loadeddata', () => {
     const src = video.currentSrc || video.src;
-    $('source').textContent = `Playing through rimgo mirror ${hostOf(src)}`;
+    $('source').textContent = `Playing through ${sourceName(src)}`;
   });
 }
 
