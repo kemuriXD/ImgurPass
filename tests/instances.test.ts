@@ -7,6 +7,7 @@ import {
   getInstances,
   getOrderedInstances,
   healthItem,
+  lastHealthCheckItem,
   instanceListItem,
   refreshInstanceList,
   reportInstanceResult,
@@ -147,6 +148,15 @@ describe('instance manager', () => {
     expect((await healthItem.getValue())[url]?.ok).toBe(false);
     await reportInstanceResult(`${url}/`, true);
     expect((await healthItem.getValue())[url]).toMatchObject({ ok: true, failures: 0 });
+  });
+
+  it('only a full check moves the last-check time', async () => {
+    await reportInstanceResult('https://ri.bcow.xyz', true, 50);
+    expect(await lastHealthCheckItem.getValue()).toBe(0);
+    await checkHealth(async () => null, '', 99);
+    expect(await lastHealthCheckItem.getValue()).toBe(99);
+    await reportInstanceResult('https://ri.bcow.xyz', true, 200);
+    expect((await healthItem.getValue())['https://ri.bcow.xyz']?.checkedAt).toBe(99);
   });
 
   it('serialises concurrent reports', async () => {

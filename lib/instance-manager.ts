@@ -23,6 +23,8 @@ export const instanceListItem = storage.defineItem<StoredList>('local:instances'
   fallback: { fetchedAt: 0, list: [] },
 });
 export const healthItem = storage.defineItem<HealthMap>('local:health', { fallback: {} });
+/** When the last full health check finished. Page reports don't count. */
+export const lastHealthCheckItem = storage.defineItem<number>('local:lastHealthCheck', { fallback: 0 });
 
 /** Serialise read-modify-write updates of the health map. */
 let healthQueue: Promise<unknown> = Promise.resolve();
@@ -71,22 +73,18 @@ export async function checkHealth(
   const custom = normalizeInstance(customInstance);
   if (custom && !urls.includes(custom)) urls.push(custom);
 
-  const results = new Map<string, boolean>();
   let next = 0;
   const worker = async () => {
     while (next < urls.length) {
       const url = urls[next++]!;
       const size = await probe(rimgoMediaUrl(url, PROBE_ID, 'jpg')).catch(() => null);
-      results.set(url, size?.width === PROBE_SIZE.width && size.height === PROBE_SIZE.height);
+      const ok = size?.width === PROBE_SIZE.width && size.height === PROBE_SIZE.height;
+      // Save as we go: a service worker can be stopped mid-check.
+      await updateHealth((h) => withCheckResult(h, url, ok, now));
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, urls.length) }, worker));
-
-  await updateHealth((h) => {
-    let out = h;
-    for (const [url, ok] of results) out = withCheckResult(out, url, ok, now);
-    return out;
-  });
+  await lastHealthCheckItem.setValue(now);
   return healthItem.getValue();
 }
 

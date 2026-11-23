@@ -6,14 +6,14 @@ const TIMEOUT_MS = 15_000;
  * Fetch an image and decode it to read its real size. Needs host access to the
  * URL (CORS is skipped for extension contexts with host permission).
  */
-export async function fetchImageSize(url: string): Promise<ProbeResult> {
+export async function fetchImageSize(url: string, timeoutMs = TIMEOUT_MS): Promise<ProbeResult> {
   let res: Response;
   try {
     res = await fetch(url, {
       cache: 'no-store',
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     return { kind: 'network-error' };

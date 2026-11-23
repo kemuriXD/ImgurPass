@@ -99,5 +99,5 @@ export function withReportedFailure(health: HealthMap, url: string, now: number)
 
 /** An image loaded from this instance on a page. */
 export function withReportedSuccess(health: HealthMap, url: string, now: number): HealthMap {
-  return { ...health, [url]: { ok: true, checkedAt: now, failures: 0 } };
+  return { ...health, [url]: { ok: true, checkedAt: health[url]?.checkedAt ?? now, failures: 0 } };
 }
