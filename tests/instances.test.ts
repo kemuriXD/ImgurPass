@@ -115,6 +115,19 @@ describe('orderInstances', () => {
     expect(orderInstances(list, capHealth, { onlyNoData: false, now, random: noShuffle }).slice(0, 3)).toContain('https://b.example');
   });
 
+  it('tries mirrors that serve images before untested ones for albums', () => {
+    // b serves images, e has never been checked: b goes first even though e says it keeps no data.
+    expect(orderInstances(list, health, { onlyNoData: false, capability: 'album', random: noShuffle })).toEqual([
+      'https://c.example',
+      'https://b.example',
+      'https://e.example',
+      'https://d.example',
+      'https://a.example',
+    ]);
+    const proven: HealthMap = { 'https://d.example': { ok: true, checkedAt: 1, failures: 0 } };
+    expect(orderInstances(list, proven, { onlyNoData: false, capability: 'album', random: noShuffle })[0]).toBe('https://d.example');
+  });
+
   it('benches an album or video mirror only after failures in a row', () => {
     let h = withCapabilityResult({}, 'https://a.example', 'album', false, 1);
     expect(h['https://a.example']?.album).toEqual({ ok: true, at: 1, failures: 1 });

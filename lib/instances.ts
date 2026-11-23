@@ -88,18 +88,23 @@ export interface OrderOptions {
   random?: () => number;
 }
 
+type Rank = 0 | 1 | 2 | 'down';
+
 /**
- * 0 = known good, 1 = untested (or benched long ago), 2 = down. Down ones carry
- * when they last failed, so the longest-ago (likeliest recovered) go first.
+ * 0 = known good for this use, 1 = known to serve images but not yet tried for
+ * this use, 2 = untested, 'down' = failed. Down ones carry when they last
+ * failed, so the longest-ago (likeliest recovered) go first.
  */
-function rank(h: Health | undefined, capability: Capability, now: number): { r: 0 | 1 | 2; failedAt: number } {
+function rank(h: Health | undefined, capability: Capability, now: number): { r: Rank; failedAt: number } {
   const imageTested = !!h && (h.checkedAt > 0 || h.failures > 0);
-  if (imageTested && !h.ok) return { r: 2, failedAt: h.checkedAt };
-  if (capability === 'image') return { r: imageTested ? 0 : 1, failedAt: 0 };
+  if (imageTested && !h.ok) return { r: 'down', failedAt: h.checkedAt };
+  if (capability === 'image') return { r: imageTested ? 0 : 2, failedAt: 0 };
   const cap = h?.[capability];
-  if (!cap) return { r: 1, failedAt: 0 };
+  // A mirror that serves images is a better bet for albums and videos than one nobody has tried.
+  const untried = { r: imageTested ? 1 : 2, failedAt: 0 } as const;
+  if (!cap) return untried;
   if (cap.ok) return { r: 0, failedAt: 0 };
-  return now - cap.at > CAPABILITY_RETRY_MS ? { r: 1, failedAt: 0 } : { r: 2, failedAt: cap.at };
+  return now - cap.at > CAPABILITY_RETRY_MS ? untried : { r: 'down', failedAt: cap.at };
 }
 
 /**
@@ -112,12 +117,12 @@ export function orderInstances(list: readonly Instance[], health: HealthMap, opt
   const random = opts.random ?? Math.random;
   const capability = opts.capability ?? 'image';
   const now = opts.now ?? Date.now();
-  const groups: Instance[][] = [[], [], [], []];
+  const groups: Instance[][] = [[], [], [], [], [], []];
   const down: { url: string; failedAt: number }[] = [];
   for (const inst of list) {
     if (opts.onlyNoData && !inst.noData) continue;
     const { r, failedAt } = rank(health[inst.url], capability, now);
-    if (r === 2) down.push({ url: inst.url, failedAt });
+    if (r === 'down') down.push({ url: inst.url, failedAt });
     else groups[r * 2 + (inst.noData ? 0 : 1)]!.push(inst);
   }
   const ordered = [
