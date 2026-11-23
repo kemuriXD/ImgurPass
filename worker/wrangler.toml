@@ -1,0 +1,14 @@
+name = "imgurpass"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# Imgur blocks UK addresses, and by default a Worker runs (and fetches) from the
+# data centre nearest the visitor. Run it next to Frankfurt instead.
+[placement]
+region = "aws:eu-central-1"
+
+[vars]
+# Set to "false" to stop proxying video (mp4, webm, gifv). Images and albums keep working.
+ALLOW_VIDEO = "true"
+
+# IMGUR_CLIENT_ID is a secret: npx wrangler secret put IMGUR_CLIENT_ID
