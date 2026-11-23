@@ -200,4 +200,46 @@ export default defineUnlistedScript(() => {
     },
     true,
   );
+
+  // Imgur's embed code is a <blockquote class="imgur-embed-pub" data-id="a/ID">
+  // plus a script from s.imgur.com that swaps it for an iframe. Where Imgur is
+  // blocked that script never loads, so swap it for the viewer ourselves.
+  function embedRoute(dataId: string | undefined): string | null {
+    const album = /^a\/([A-Za-z0-9]{5,10})$/.exec(dataId ?? '');
+    if (album) return `a/${album[1]}`;
+    const post = /^([A-Za-z0-9]{5,10})$/.exec(dataId ?? '');
+    return post ? `post/${post[1]}` : null;
+  }
+
+  async function replaceEmbeds() {
+    const quotes = [...document.querySelectorAll<HTMLElement>('blockquote.imgur-embed-pub[data-id]')];
+    if (quotes.length === 0 || !(await getFallbacks('image'))?.active) return;
+    for (const quote of quotes) {
+      const route = embedRoute(quote.dataset.id);
+      if (!route || !quote.isConnected) continue;
+      const frame = document.createElement('iframe');
+      frame.src = browser.runtime.getURL(`/viewer.html#${route}`);
+      frame.title = quote.textContent?.trim() || 'Imgur post';
+      frame.loading = 'lazy';
+      frame.setAttribute('data-imgurpass-embed', '');
+      frame.style.cssText = 'display:block;width:100%;max-width:540px;height:500px;border:0;border-radius:8px';
+      quote.replaceWith(frame);
+    }
+  }
+
+  let pending = false;
+  const scheduleEmbeds = () => {
+    if (pending) return;
+    pending = true;
+    setTimeout(() => {
+      pending = false;
+      void replaceEmbeds();
+    }, 200);
+  };
+  const watch = () => {
+    scheduleEmbeds();
+    new MutationObserver(scheduleEmbeds).observe(document.body ?? document.documentElement, { childList: true, subtree: true });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch, { once: true });
+  else watch();
 });

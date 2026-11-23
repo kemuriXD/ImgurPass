@@ -60,6 +60,14 @@ test.describe('while unblocking', () => {
     expect(fromMirror).toContain(`${mirror}/OB0y6MR.jpg`);
   });
 
+  test("swaps Imgur's own embed code for the viewer", async ({ context, site, extensionId }) => {
+    const page = await context.newPage();
+    await page.goto(`${site}/imgur-embed.html`);
+    const frame = page.locator('iframe[data-imgurpass-embed]');
+    await expect(frame).toHaveAttribute('src', `chrome-extension://${extensionId}/viewer.html#a/tUlsG`);
+    await expect(page.locator('blockquote.imgur-embed-pub')).toHaveCount(0);
+  });
+
   test('opens album links in the viewer', async ({ context, extensionId }) => {
     const page = await context.newPage();
     await page.goto('https://imgur.com/a/AbCd123').catch(() => {});
